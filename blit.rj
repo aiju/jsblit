@@ -1,0 +1,162 @@
+int vblctr = 0;
+int uartrxctr = 0;
+int SX = 800;
+int SY = 1024;
+var canvas, ctx, pic;
+var ws;
+
+int FREQ = 8000000;
+int VBLDIV = Math.floor(FREQ / 60);
+
+upx1 = 0;
+upy1 = 0;
+upx2 = SX;
+upy2 = SY;
+
+void
+redraw(void)
+{
+	int i, j, p;
+	int d[];
+
+	upx1 = 0;
+	upy1 = 0;
+	upx2 = SX;
+	upy2 = SY;
+	
+	if(upy1 >= upy2 || upx1 >= upx2)
+		return;
+	
+	d = pic.data;
+	for(j = upy1; j < upy2; j++)
+		for(i = upx1; i < upx2; i++){
+			p = (invert^ram[(daddr>>1) + (SX/16) * j + (i>>4)]) >> 15-(i%16) & 1;
+			d[(j * SX + i) * 4] = p * 255;
+			d[(j * SX + i) * 4 + 1] = p * 255;
+			d[(j * SX + i) * 4 + 2] = p * 255;
+			d[(j * SX + i) * 4 + 3] = 255;
+		}
+	ctx.putImageData(pic, 0, 0, upx1, upy1, upx2 - upx1, upy2 - upy1);
+	upx1 = SX;
+	upy1 = SY;
+	upx2 = 0;
+	upy2 = 0;
+}
+
+void
+frame(void)
+{
+	int n;
+	
+	do{
+		keycheck();
+		n = step();
+		if(trace) return;
+		vblctr += n;
+		if(uartrxctr > 0)
+			uartrxctr -= n;
+	}while(vblctr < VBLDIV);
+	vblctr -= VBLDIV;
+	irq |= INTVBL;
+	redraw();
+}
+
+string keys[string] = {
+	"Enter": "\r",
+	"Backspace": "\b",
+	"Escape": "\x1b",
+	"Delete": "\x7f",
+	"ArrowUp": "\xf1",
+	"ArrowDown": "\xf2",
+	"ArrowLeft": "\xf3",
+	"ArrowRight": "\xf4",
+	"F1": "\xf6",
+	"F2": "\xf7",
+	"F3": "\xf8",
+	"F4": "\xf9",
+	"F12": "\xfe",
+	"PageDown": "\xb0",
+	"Insert": "\xe0",
+};
+
+bool
+key(var e)
+{
+	var k, m, i;
+	
+	k = e.key;
+	if(k.length == 1){
+		i = k.charCodeAt(0);
+		if(e.ctrlKey && i >= 64 && i < 127)
+			keychan += String.fromCharCode(i & 0x1f);
+		else
+			keychan += k;
+	}else if(keys[k] !== undefined)
+		keychan += keys[k];
+	else
+		return true;
+	return false;
+}
+
+bool
+mousemove(var e)
+{
+	var r;
+	int px, py;
+	
+	r = canvas.getBoundingClientRect();
+	px = e.clientX - r.left;
+	py = e.clientY - r.top;
+	mousex = SX - px - 1;
+	mousey = SY - py - 1;
+	return false;
+}
+
+bool
+mousedown(var e)
+{
+	int n;
+
+	n = e.buttons << 2 & 4 | e.buttons >> 1 & 1 | e.buttons >> 1 & 2;
+	if(n != mousebut){
+		mousebut = n;
+		irq |= INTMOUSE;
+	}
+	return false;
+}
+
+bool
+mouseleave(var e)
+{
+	if(mousebut != 0){
+		mousebut = 0;
+		irq |= INTMOUSE;
+	}
+	return true;
+}
+
+void
+main(void)
+{
+	ws = new WebSocket("ws://localhost:8080/telnet", "telnet");
+	ws.onmessage = telnetrx;
+	ws.onopen = telnetinit;
+	canvas = document.getElementById("canv");
+	ctx = canvas.getContext("2d");
+	pic = ctx.createImageData(SX, SY);
+	cpureset();
+	window.onkeydown = key;
+	canvas.onmousemove = mousemove;
+	canvas.onmousedown = mousedown;
+	canvas.onmouseup = mousedown;
+	canvas.onmouseleave = mouseleave;
+	canvas.oncontextmenu = bool(void) return false;
+	window.setInterval(frame, 1000/60);
+}
+
+void
+steps(int n)
+{
+	while(n-- > 0)
+		step();
+}

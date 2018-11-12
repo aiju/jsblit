@@ -1,0 +1,625 @@
+int
+_u8(int x)
+{
+	return x & 0xff;
+}
+
+int
+_u16(int x)
+{
+	return x & 0xffff;
+}
+
+int
+_u32(int x)
+{
+	x |= 0;
+	if(x < 0) x += 4294967296;
+	return x;
+}
+
+int
+_s8(int x)
+{
+	return x<<24>>24;
+}
+
+int
+_s16(int x)
+{
+	return x<<16>>16;
+}
+
+int
+_s32(int x)
+{
+	return x|0;
+}
+
+var _state = 1475;
+int
+random(int n)
+{
+	int x;
+	
+	x = _state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	_state = x;
+	return u32(x)>>>32-n;
+}
+
+int
+encamode(var s, string cat)
+{
+	switch(s[0]){
+	case "D":
+		if(cat.indexOf("m") >= 0) throw "404";
+		if(cat.indexOf("c") >= 0) throw "404";
+		return s[1];
+	case "A":
+		if(cat.indexOf("m") >= 0) throw "404";
+		if(cat.indexOf("d") >= 0) throw "404";
+		if(cat.indexOf("c") >= 0) throw "404";
+		return 010 | s[1];
+	case "(A)":
+		return 020 | s[1];
+	case "(A)+":
+		if(cat.indexOf("c") >= 0) throw "404";
+		return 030 | s[1];
+	case "-(A)":
+		if(cat.indexOf("c") >= 0) throw "404";
+		return 040 | s[1];
+	case "(d16,A)":
+		return 050 | s[1];
+	case "(d8,A,X.W)":
+	case "(d8,A,X.L)":
+		return 060 | s[1];
+	case "(d16,PC)":
+		if(cat.indexOf("a") >= 0) throw "404";
+		return 072;
+	case "(d8,PC,X.W)":
+	case "(d8,PC,X.L)":
+		if(cat.indexOf("a") >= 0) throw "404";
+		return 073;
+	case "(xxx).W":
+		if(cat.indexOf("a") >= 0) throw "404";
+		return 070;
+	case "(xxx).L":
+		if(cat.indexOf("a") >= 0) throw "404";
+		return 071;
+	case "#imm":
+		if(cat.indexOf("a") >= 0) throw "404";
+		if(cat.indexOf("c") >= 0) throw "404";
+		return 074;
+	default:
+		throw "don't know how to encode " + (string)s;
+	}
+}
+
+int
+amrest(string size, var s)[]
+{
+	switch(s[0]){
+	case "D":
+	case "A":
+	case "(A)":
+	case "(A)+":
+	case "-(A)":
+		return [];
+	case "(d16,A)":
+	case "(d16,PC)":
+		return [s[2]];
+	case "(xxx).W":
+		return [s[1]];
+	case "(xxx).L":
+		return [_u16(s[1]>>16), _u16(s[1])];
+	case "(d8,A,X.W)":
+		return [s[2]<<12 | _u8(s[3])];
+	case "(d8,A,X.L)":
+		return [s[2]<<12 | 1<<11 | _u8(s[3])];
+	case "(d8,PC,X.W)":
+		return [s[1]<<12 | _u8(s[2])];
+	case "(d8,PC,X.L)":
+		return [s[1]<<12 | 1<<11 | _u8(s[2])];
+	case "#imm":
+		switch(size){
+		case "B": return [_u8(s[1])];
+		case "W": return [_u16(s[1])];
+		case "L": return [_u16(s[1] >> 16), _u16(s[1])];
+		default: throw "amrest";
+		}
+	default:
+		throw "don't know how to encode " + (string)s;
+	}
+
+}
+
+bool
+match(var a[], var b[], var l[])
+{
+	int i;
+	extern var Array;
+
+	if(typeof(a) == "string"){
+		if(a.substr(0,1) == "$"){
+			if(a.length != 1)
+				l[a.substr(1)] = b;
+			return true;
+		}
+		return a === b;
+	}
+	if(typeof(a) == "number")
+		return a === b;
+	if(a instanceof Array){
+		if(!(b instanceof Array))
+			return false;
+		if(a.length != b.length)
+			return false;
+		for(i = 0; i < a.length; i++)
+			if(!match(a[i], b[i], l))
+				return false;
+		return true;
+	}
+	throw "can't match " + (string)a + " and " + (string)b;
+}
+
+int
+encode(var op[])[]
+{
+	int i;
+	var l[];
+	
+	for(i = 0; i < encodetab.length; i += 2){
+		l = new Array;
+		if(match(encodetab[i], op, l)){
+			return encodetab[i+1].apply(undefined, l);
+		}
+	}
+	throw "no match for " + (string)op;
+}
+
+var
+derand(var x)
+{
+	int n;
+	extern var Array;
+
+	if(typeof(x) == "number")
+		return x;
+	if(typeof(x) == "string"){
+		if(x.substr(0,2) == "%r"){
+			n = (int)x.substr(2);
+			return random(n);
+		}
+		if(x.substr(0,2) == "%R"){
+			n = (int)x.substr(2);
+			return random(n) >>> random(1) * (random(32)%n);
+		}
+		if(x == "%s8"){
+			n = random(3);
+			return n == 0 ? 8 : n;
+		}
+		return x;
+	}
+	if(x instanceof Array)
+		return x.map(derand);
+	throw "dunno how to derand " + (string)x;
+}
+
+int rstart[];
+int rend[];
+int rSstart, rSend;
+int mem[string];
+int memwr_exp[string];
+int memwr_got[string];
+
+int
+rval(int n)
+{
+	if(rend[n] !== undefined)
+		return rend[n];
+	if(rstart[n] !== undefined)
+		return rstart[n];
+	rstart[n] = random(32);
+	return rstart[n];
+}
+
+void
+rval_sug(int n, int v)
+{
+	if(rend[n] === undefined && rstart[n] === undefined)
+		rstart[n] = v;
+}
+
+int
+rval_addr(string size, int n)
+{
+	if(rend[n] !== undefined || rstart[n] !== undefined){
+		if(size != "B" && (rval(n) & 1) != 0)
+			throw "no";
+	}else{
+		rstart[n] = random(32);
+		if(size != "B")
+			rstart[n] &= ~1;
+		rstart[n] = u32(rstart[n]);
+	}
+	return rval(n);
+}
+
+void
+mem_sug(string size, int n, int v)
+{
+	switch(size){
+	case "B":
+		if(memwr_exp[(string)n] === undefined && mem[(string)n] === undefined)
+			mem[(string)n] = _u8(v);
+		break;
+	case "W":
+		mem_sug("B", n, v);
+		mem_sug("B", n+1, v >> 8);
+		break;
+	case "L":
+		mem_sug("W", n, v);
+		mem_sug("W", n+2, v >> 16);
+		break;
+	}
+}
+
+
+string
+_amode(var size, var x[])
+{
+	int a;
+
+	switch(x[0]){
+	case "D":
+		rval_sug(x[1], x[2]);
+		return "R" + (string)x[1];
+	case "A":
+		rval_sug(8+x[1], x[2]);
+		return "R" + (string)(8+x[1]);
+	case "(A)":
+		a = rval_addr(size, 8+x[1]);
+		mem_sug(size, a, x[2]);
+		return (string)a;
+	case "(A)+":
+		a = rval_addr(size, 8+x[1]);
+		switch(size){
+		case "B": rend[8+x[1]] = _u32(a+(x[1] == 7?2:1)); break;
+		case "W": rend[8+x[1]] = _u32(a+2); break;
+		case "L": rend[8+x[1]] = _u32(a+4); break;
+		}
+		mem_sug(size, a, x[2]);
+		return (string)a;
+	case "-(A)":
+		a = rval_addr(size, 8+x[1]);
+		switch(size){
+		case "B": rend[8+x[1]] = a = _u32(a-(x[1] == 7?2:1)); break;
+		case "W": rend[8+x[1]] = a = _u32(a-2); break;
+		case "L": rend[8+x[1]] = a = _u32(a-4); break;
+		}
+		mem_sug(size, a, x[2]);
+		return (string)a;
+	case "(d16,A)":
+		if(size != "B" && (x[2] & 1) != 0)
+			throw "no";
+		a = _u32(rval_addr(size, 8+x[1]) + _s16(x[2]));
+		mem_sug(size, a, x[3]);
+		return (string)a;
+	case "(d16,PC)":
+		throw "no";
+		if(size != "B" && (x[2] & 1) != 0)
+			throw "no";
+		a = _u32(pc + 2 + _s16(x[2]));
+		mem_sug(size, a, x[3]);
+		return (string)a;
+	case "(xxx).W":
+		if(size != "B" && (x[1] & 1) != 0)
+			throw "no";
+		a = _u32(_s16(x[1]));
+		mem_sug(size, a, x[3]);
+		return (string)a;
+	case "(xxx).L":
+		if(size != "B" && (x[1] & 1) != 0)
+			throw "no";
+		mem_sug(size, x[1], x[3]);
+		return (string)x[1];
+	case "(d8,A,X.W)":
+		if(size != "B" && (x[3] & 1) != 0)
+			throw "no";
+		a = _u32(rval_addr(size, 8+x[1]) + _s16(rval_addr(size, x[2])) + _s8(x[3]));
+		mem_sug(size, a, x[4]);
+		return (string)a;
+	case "(d8,A,X.L)":
+		if(size != "B" && (x[3] & 1) != 0)
+			throw "no";
+		a = _u32(rval_addr(size, 8+x[1]) + rval_addr(size, x[2]) + _s8(x[3]));
+		mem_sug(size, a, x[4]);
+		return (string)a;
+	case "(d8,PC,X.W)":
+		throw "no";
+		if(size != "B" && (x[2] & 1) != 0)
+			throw "no";
+		a = _u32(pc + 2 + _s16(rval_addr(size, x[1])) + _s8(x[2]));
+		mem_sug(size, a, x[3]);
+		return (string)a;
+	case "(d8,PC,X.L)":
+		throw "no";
+		if(size != "B" && (x[2] & 1) != 0)
+			throw "no";
+		a = _u32(pc + 2 + rval_addr(size, x[1]) + _s8(x[2]));
+		mem_sug(size, a, x[3]);
+		return (string)a;
+	case "#imm":
+		switch(size){
+		case "B": x[1] = _u8(x[1]); break;
+		case "W": x[1] = _u16(x[1]); break;
+		}
+		return "I" + (string)x[1];
+	default:
+		throw "dunno how to _amode " + x[0];
+	}
+}
+
+int
+read_byte(string addr, int off)
+{
+	string sa;
+	
+	sa = (string)u32((int)addr + off);
+	if(memwr_exp[sa] !== undefined)
+		return memwr_exp[sa];
+	return mem[sa];
+}
+
+int
+_cast(string size, int val, bool sx)
+{
+	switch(size){
+	case "B":
+		return sx ? _s8(val) : _u8(val);
+	case "W":
+		return sx ? _s16(val) : _u16(val);
+	case "L":
+		return sx ? _s32(val) : _u32(val);
+	default:
+		throw "_cast";
+	}
+}
+
+int
+read(string size, string addr, bool sx)
+{
+	int v;
+
+	if(addr[0] == "R")
+		v = rval((int)addr.substr(1));
+	else if(addr[0] == "I")
+		v = (int)addr.substr(1);
+	else
+		switch(size){
+		case "B":
+			v = read_byte(addr, 0);
+			break;
+		case "W":
+			v = read_byte(addr, 0) << 8;
+			v |= read_byte(addr, 1);
+			break;
+		case "L":
+			v = read_byte(addr, 0) << 24;
+			v |= read_byte(addr, 1) << 16;
+			v |= read_byte(addr, 2) << 8;
+			v |= read_byte(addr, 3);
+			break;
+		default: throw "read";
+		}
+	return _cast(size, v, sx);
+}
+
+void
+write_byte_exp(string addr, int off, int v)
+{
+	string sa;
+	
+	sa = (string)u32((int)addr+off);
+	if(mem[sa] === undefined) mem[sa] = random(8);
+	memwr_exp[sa] = u8(v);
+}
+
+void
+write(var size, string addr, int v)
+{
+	int n;
+	
+	if(addr[0] == "R"){
+		n = (int)addr.substr(1);
+		switch(size){
+		case "B":
+			rend[n] = _u32(rval(n) & 0xffffff00 | v & 0xff);
+			break;
+		case "W":
+			rend[n] = _u32(rval(n) & 0xffff0000 | v & 0xffff);
+			break;
+		case "L":
+			rend[n] = _u32(v);
+			break;
+		}
+	}else{
+		switch(size){
+		case "B":
+			write_byte_exp(addr, 0, v);
+			break;
+		case "W":
+			write_byte_exp(addr, 0, v>>8);
+			write_byte_exp(addr, 1, v);
+			break;
+		case "L":
+			write_byte_exp(addr, 0, v>>24);
+			write_byte_exp(addr, 1, v>>16);
+			write_byte_exp(addr, 2, v>>8);
+			write_byte_exp(addr, 3, v);
+			break;
+		}
+	}
+	
+}
+
+string
+formata(var x[])
+{
+	string n;
+	
+	n = (string)x[1];
+	switch(x[0]){
+	case "D": return "D" + n;
+	case "A": return "A" + n;
+	case "(A)": return "(A" + n + ")";
+	case "(A)+": return "(A" + n + ")+";
+	case "-(A)": return "-(A" + n + ")";
+	case "(d16,A)": return "(A" + n + ", " + (string)_s16(x[2]) + ")";
+	case "(d16,PC)": return "(PC, " + (string)_s16(x[2]) + ")";
+	case "(xxx).W": return "(0x" + X(_u32(_s16(x[1])),8) + ").W";
+	case "(xxx).L": return "(0x" + X(x[1],8) + ").L";
+	case "(d8,A,X.W)": return "(A" + n + ", " + (x[2]<8?"D":"A") + (string)(x[2]%8) + ".W, " + (string)_s8(x[3]) + ")";
+	case "(d8,A,X.L)": return "(A" + n + ", " + (x[2]<8?"D":"A") + (string)(x[2]%8) + ".L, " + (string)_s8(x[3]) + ")";
+	case "(d8,PC,X.W)": return "(PC, " + (x[1]<8?"D":"A") + (string)(x[1]%8) + ".W, " + (string)_s8(x[2]) + ")";
+	case "(d8,PC,X.L)": return "(PC, " + (x[1]<8?"D":"A") + (string)(x[1]%8) + ".L, " + (string)_s8(x[2]) + ")";
+	case "#imm": return "#" + n;
+	case "list": return X(x[1],4);
+	default:
+		throw "dunno how to formata " + (string)x;
+	}
+
+}
+
+string
+SRformat(int n)
+{
+	return X(n,4) + " " + " X".substr(n>>4&1,1) + " N".substr(n>>3&1,1) + " Z".substr(n>>2&1,1) + " V".substr(n>>1&1,1) + " C".substr(n&1,1);
+}
+
+void
+run(var l[])
+{
+	var m, e, v;
+	var i;
+	bool fail;
+	string failmsg;
+	string addr;
+	
+	m = derand(l);
+	rSend = rSstart = random(5);
+	mem = {};
+	memwr_exp = {};
+	memwr_got = {};
+	pc = 1234;
+	try{
+		e = encode(m);
+		for(i = 0; i < e.length; i++){
+			mem[(string)u32(pc + 2 * i)] = u8(e[i] >> 8);
+			mem[(string)u32(pc + 2 * i + 1)] = u8(e[i]);
+		}
+		simulate(m);
+	}catch(e){
+		if(e === "404") return;
+		if(e !== "no") throw e;
+//		document.write("<p>Test rejected: <tt>" + format(m) + "</tt></p>");
+		return;
+	}
+	for(i = 0; i < 16; i++){
+		if(rstart[i] === undefined)
+			rstart[i] = derand("%R32");
+		r[i] = rstart[i];
+	}
+	rS = rSstart;
+	failmsg = "";
+	fail = false;
+	try{
+		step();
+	}catch(e){
+		failmsg = (string)e;
+		fail=true;
+	}
+	fail = fail || rS != rSend;
+	for(i = 0; i < 16; i++)
+		fail = fail || r[i] !== rval(i);
+	for(addr in mem)
+		fail = fail || memwr_exp[addr] !== memwr_got[addr];
+	if(fail){
+		document.write("<p>Test failed: <tt>" + format(m) + "</tt> " + failmsg + "<br>");
+		document.write("<tt>" + e.map(var(s) return O(s,6)) + "</tt><br>");
+		document.write("<table>");
+		for(i = 0; i < 16; i++){
+			fail = r[i] !== rval(i);
+			document.write("<tr" + (fail ? " style=\"font-weight: bold\"": "") + ">" +
+				"<td>" + (i < 8 ? "D":"A") + (string)(i%8) + "</td>" +
+				"<td><tt>" + X(rstart[i],8) + "</tt></td>" +
+				"<td><tt>" + (rstart[i] !== rval(i) ? X(rval(i),8) : "&mdash;") + "</tt></td>" +
+				"<td><tt>" + (rstart[i] !== r[i] ? X(r[i],8) : "&mdash;") + "</tt></td>" +
+			"</tr>");
+		}
+		document.write("<tr" + (rSend!=rS ? " style=\"font-weight: bold\"": "") + ">" +
+			"<td>SR</td>" +
+			"<td><tt>" + SRformat(rSstart) + "</tt></td>" +
+			"<td><tt>" + SRformat(rSend) + "</tt></td>" +
+			"<td><tt>" + SRformat(rS) + "</tt></td>" +
+		"</tr>");
+		for(addr in mem){
+			fail = memwr_exp[addr] !== memwr_got[addr];
+			document.write("<tr" + (fail ? " style=\"font-weight: bold\"": "") + "><td><tt>" + X((int)addr, 8) + "</tt></td>" +
+				"<td><tt>" + X(mem[addr],2) + "</tt></td>" + 
+				"<td><tt>" + (memwr_exp[addr] !== undefined ? X(memwr_exp[addr],2) : "&mdash;") + "</tt></td>" + 
+				"<td><tt>" + (memwr_got[addr] !== undefined ? X(memwr_got[addr],2) : "&mdash;") + "</tt></td>" + 
+				"</tr>");
+		}
+		document.write("</table></p>");
+	}
+}
+
+var
+read_byte_got(int a)
+{
+	string sa;
+	
+	sa = (string)u32(a);
+	if(memwr_got[sa] !== undefined)
+		return memwr_got[sa];
+	return mem[sa];
+}
+
+int
+memread(int a)
+{
+	var low, high;
+	
+	high = read_byte_got(a & ~1);
+	low = read_byte_got(a | 1);
+	if(low === undefined && high === undefined)
+		throw "unexpected read from " + X(a, 8);
+	if(low === undefined) low = random(8);
+	if(high === undefined) high = random(8);
+	return low | high << 8;
+}
+
+void
+memwrite(int a, int v, int m)
+{
+	if((m & 0xff00) != 0){
+		if(mem[(string)u32(a&~1)] === undefined)
+			mem[(string)u32(a&~1)] = random(8);
+		memwr_got[(string)u32(a&~1)] = u8(v>>8);
+	}
+	if((m & 0xff) != 0){
+		if(mem[(string)u32(a|1)] === undefined)
+			mem[(string)u32(a|1)] = random(8);
+		memwr_got[(string)u32(a|1)] = u8(v);
+	}
+}
+
+int
+intack(int l)
+{
+	return 24+l;
+}

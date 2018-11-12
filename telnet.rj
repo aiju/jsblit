@@ -1,0 +1,89 @@
+string SE = "\xf0";
+string NOP = "\xf1";
+string BRK = "\xf3";
+string IP = "\xf4";
+string AO = "\xf5";
+string AYT = "\xf6";
+string EC = "\xf7";
+string EL = "\xf8";
+string GA = "\xf9";
+string SB = "\xfa";
+string WILL = "\xfb";
+string WONT = "\xfc";
+string DO = "\xfd";
+string DONT = "\xfe";
+string IAC = "\xff";
+string XMITBIN = "\x00";
+string ECHO = "\x01";
+string SUPRGA = "\x03";
+string LINEEDIT = "\x22";
+
+string first = "";
+
+void telnetchar(string c);
+
+void
+firstchar(string c)
+{
+	if(c != IAC){
+		uartrxchan += c;
+		return;
+	}
+	telnetchar = void(string c){
+		switch(c){
+		case NOP:
+			telnetchar = firstchar;
+			break;
+		case WILL:
+		case WONT:
+		case DO:
+		case DONT:
+			telnetchar = void(string c){
+				telnetchar = firstchar;
+			};
+			break;
+		case IAC:
+			uartrxchan += IAC;
+			telnetchar = firstchar;
+			break;
+		default:
+			console.log("unknown telnet command " + (string)c.charCodeAt(0));
+			telnetchar = firstchar;
+		}
+	};
+}
+
+telnetchar = firstchar;
+
+void
+telnetrx(var e)
+{
+	string s, c;
+	int i;
+	
+	s = atob(e.data);
+	for(i = 0; i < s.length; i++)
+		telnetchar(s.substr(i, 1));
+}
+
+void
+telnettx(string s)
+{
+	if(s == IAC)
+		s += IAC;
+	ws.send(btoa(s));
+}
+
+void
+telnetinit(var e)
+{
+	ws.send(btoa(
+		WILL + XMITBIN +
+		DO + XMITBIN +
+		DONT + ECHO +
+		DO + SUPRGA +
+		WILL + SUPRGA +
+		WONT + LINEEDIT +
+		DONT + LINEEDIT
+	));
+}
