@@ -408,7 +408,8 @@ rot(int v, int m, int n, int s)
 			l = (int)((v & msb) != 0);
 			v <<= 1;
 		}
-		rS = rS & ~FLAGX | l << 4;
+		if((m & 6) != 6)
+			rS = rS & ~FLAGX | l << 4;
 		if(m >= 6)
 			x = l;
 		else if(m >= 4){
@@ -457,22 +458,23 @@ addbcd(int a, int b)
 int
 subbcd(int a, int b)
 {
-	int r;
+	int r, bc, s;
 	
-	r = (a & 0xf) + (~b & 0xf) + (~rS >> 4 & 1);
-	if(r < 0x10) r -= 0x06;
-	if(r < 0) r += 0x10;
-	r += (a & 0xf0) + (~b & 0xf0);
-	if(r > 0xff)
-		rS &= ~(FLAGC|FLAGX);
-	else{
+	a &= 0xff;
+	b &= 0xff;
+	r = a - b - (rS >> 4 & 1);
+	bc = ((a ^ b ^ r) & 0x110) >> 1;
+	s = _u8(r - (bc - (bc >> 2)));
+	rS &= ~(FLAGC|FLAGX|FLAGN|FLAGV);
+	if(((bc | (~r & s)) & 0x80) != 0)
 		rS |= FLAGC|FLAGX;
-		r -= 0x60;
-	}
-	r = u8(r);
-	if(r != 0)
+	if(s != 0)
 		rS &= ~FLAGZ;
-	return r;
+	if((s & 0x80) != 0)
+		rS |= FLAGN;
+	if((r & ~s & 0x80) != 0)
+		rS |= FLAGV;
+	return s;
 }
 
 void
@@ -829,20 +831,9 @@ step(void)
 				break;
 			} /* NEGX */
 			a = amode(op >> 3, op, s);
-			m = (int)((rS & FLAGX) != 0);
-			d = 1<<(8<<s)-1;
 			v = rmode(a, s);
-			w = -(v+m) & (d << 1) - 1;
-			rS &= ~(FLAGC|FLAGX|FLAGN|FLAGV);
-			if((w & d) != 0)
-				rS |= FLAGN;
-			if(m && w == d)
-				rS |= FLAGV;
-			if(w != 0){
-				rS |= FLAGC|FLAGX;
-				rS &= ~FLAGZ;
-			}
-			wmode(a, s, w);
+			wmode(a, s, sub(0, v, rS>>4 & 1, s));
+			rS = rS & ~FLAGX | rS << 4 & FLAGX;
 			stime(a < 0, s);
 			break;
 		case 2: /* CLR */
@@ -858,8 +849,8 @@ step(void)
 				break;
 			} /* NEG */
 			a = amode(op >> 3, op, s);
-			v = -rmode(a, s);
-			nz(v, s);
+			rS |= FLAGZ;
+			v = sub(0, rmode(a, s), 0, s);
 			rS = rS & ~FLAGX | ~rS << 2 & FLAGX | ~rS >> 2 & FLAGC;
 			wmode(a, s, v);
 			stime(a < 0, s);
@@ -920,7 +911,7 @@ step(void)
 				a = amode(op >> 3, op, 0);
 				v = rmode(a, 0);
 				nz(v, 0);
-				wmode(a, s, v | 0x80);
+				wmode(a, 0, v | 0x80);
 				tim += a < 0 ? 4 : 14;
 				break;
 			} /* TST */
@@ -1167,7 +1158,7 @@ step(void)
 			else
 				v = u16(v) * u16(r[n]);
 			r[n] = u32(v);
-			nz(v, 1);
+			nz(v, 2);
 			tim += 70;
 			break;
 		}
@@ -1231,7 +1222,6 @@ step(void)
 				a = -(n+1);
 				tim += s == 2 ? 8 : 4;
 			}
-			rS |= FLAGZ;
 			if((op >> 12) == 13)
 				v = add(v, w, (rS & FLAGX) >> 4, s);
 			else

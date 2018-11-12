@@ -11,7 +11,7 @@ _nz(string size, int a)
 }
 
 int
-_add(string size, int a, int b, int c)
+_add(string size, int a, int b, int c, bool zflag)
 {
 	int r, t;
 	var u, s;
@@ -33,8 +33,9 @@ _add(string size, int a, int b, int c)
 	}
 	r = u(a) + u(b) + c;
 	t = s(a) + s(b) + c;
-	rSend &= ~(FLAGX|FLAGN|FLAGV|FLAGC|FLAGZ);
-	if(u(r) == 0) rSend |= FLAGZ;
+	rSend &= ~(FLAGX|FLAGN|FLAGV|FLAGC);
+	if(zflag) rSend |= FLAGZ;
+	if(u(r) != 0) rSend &= ~FLAGZ;
 	if(u(r) != r) rSend |= FLAGC|FLAGX;
 	if(s(r) < 0) rSend |= FLAGN;
 	if(s(t) != t) rSend |= FLAGV;
@@ -42,7 +43,7 @@ _add(string size, int a, int b, int c)
 }
 
 int
-_sub(string size, int a, int b, int c, bool xflag)
+_sub(string size, int a, int b, int c, bool xflag, bool zflag)
 {
 	int r, t;
 	var u, s;
@@ -64,8 +65,9 @@ _sub(string size, int a, int b, int c, bool xflag)
 	}
 	r = u(a) - u(b) - c;
 	t = s(a) - s(b) - c;
-	rSend &= ~(FLAGN|FLAGV|FLAGC|FLAGZ);
-	if(u(r) == 0) rSend |= FLAGZ;
+	rSend &= ~(FLAGN|FLAGV|FLAGC);
+	if(zflag) rSend |= FLAGZ;
+	if(u(r) != 0) rSend &= ~FLAGZ;
 	if(u(r) != r) rSend |= FLAGC;
 	if(s(r) < 0) rSend |= FLAGN;
 	if(s(t) != t) rSend |= FLAGV;
@@ -170,7 +172,6 @@ _lsr(string size, int a, int b)
 	case "L": n = 32; break;
 	}
 	b &= 63;
-	a = _cast(size, a, false);
 	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
 	for(i = 0; i < b; i++){
 		if((a & 1) != 0)
@@ -178,6 +179,119 @@ _lsr(string size, int a, int b)
 		else
 			rSend &= ~(FLAGX|FLAGC);
 		a >>>= 1;
+	}
+	if((a >> n-1 & 1) != 0)
+		rSend |= FLAGN;
+	r = _cast(size, a, false);
+	if(r == 0)
+		rSend |= FLAGZ;
+	return r;
+}
+
+int
+_rol(string size, int a, int b)
+{
+	int i, n, m, r;
+
+	switch(size){
+	case "B": n = 8; break;
+	case "W": n = 16; break;
+	case "L": n = 32; break;
+	}
+	b &= 63;
+	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	a = _cast(size, a, false);
+	for(i = 0; i < b; i++){
+		a = a << 1 | a >> n-1 & 1;
+		rSend = rSend & ~FLAGC | a & 1;
+	}
+	if((a >> n-1 & 1) != 0)
+		rSend |= FLAGN;
+	r = _cast(size, a, false);
+	if(r == 0)
+		rSend |= FLAGZ;
+	return r;
+}
+
+int
+_ror(string size, int a, int b)
+{
+	int i, n, r;
+
+	switch(size){
+	case "B": n = 8; break;
+	case "W": n = 16; break;
+	case "L": n = 32; break;
+	}
+	b &= 63;
+	a = _cast(size, a, false);
+	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	for(i = 0; i < b; i++){
+		if((a & 1) != 0){
+			rSend |= FLAGC;
+			a = a >>> 1 | 1<<n-1;
+		}else{
+			rSend &= ~FLAGC;
+			a >>>= 1;
+		}
+	}
+	if((a >> n-1 & 1) != 0)
+		rSend |= FLAGN;
+	r = _cast(size, a, false);
+	if(r == 0)
+		rSend |= FLAGZ;
+	return r;
+}
+
+int
+_roxl(string size, int a, int b)
+{
+	int i, n, m, r, x, y;
+
+	switch(size){
+	case "B": n = 8; break;
+	case "W": n = 16; break;
+	case "L": n = 32; break;
+	}
+	b &= 63;
+	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	a = _cast(size, a, false);
+	x = rSstart >> 4 & 1;
+	rSend = rSend & ~FLAGC | x;
+	for(i = 0; i < b; i++){
+		y = a >> n-1 & 1;
+		rSend = rSend & ~(FLAGC|FLAGX) | y << 4 | y;
+		a = a << 1 | x;
+		x = y;
+	}
+	if((a >> n-1 & 1) != 0)
+		rSend |= FLAGN;
+	r = _cast(size, a, false);
+	if(r == 0)
+		rSend |= FLAGZ;
+	return r;
+}
+
+int
+_roxr(string size, int a, int b)
+{
+	int i, n, r, x, y;
+
+	switch(size){
+	case "B": n = 8; break;
+	case "W": n = 16; break;
+	case "L": n = 32; break;
+	}
+	b &= 63;
+	a = _cast(size, a, false);
+	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	x = rSstart >> 4 & 1;
+	rSend = rSend & ~FLAGC | x;
+	for(i = 0; i < b; i++){
+		y = a & 1;
+		rSend = rSend & ~(FLAGC|FLAGX) | y << 4 | y;
+		a = a >>> 1 | x << n-1;
+		x = y;
 	}
 	if((a >> n-1 & 1) != 0)
 		rSend |= FLAGN;
@@ -200,6 +314,41 @@ _abcd(int a, int b)
 	rSend &= ~(FLAGX|FLAGC|FLAGN|FLAGV);
 	if((bc | ss & ~rr) >> 7 != 0) rSend |= FLAGX|FLAGC;
 	if((~ss & rr) >> 7 != 0) rSend |= FLAGV;
+	if(rr != 0) rSend &= ~FLAGZ;
+	if((rr & 0x80) != 0) rSend |= FLAGN;
+	return rr;
+}
+
+int
+_sbcd(int a, int b)
+{
+	int dd, bc, dc, corf, rr;
+	
+	dd = _u8(a - b - ((rSstart & FLAGX) != 0 ? 1 : 0));
+	bc = (~a & b | dd & ~a | dd & b) & 0x88;
+	corf = _u8(bc - (bc >> 2));
+	rr = _u8(dd - corf);
+	rSend &= ~(FLAGX|FLAGC|FLAGN|FLAGV);
+	if((bc | ~dd & rr) >> 7 != 0) rSend |= FLAGX|FLAGC;
+	if((dd & ~rr) >> 7 != 0) rSend |= FLAGV;
+	if(rr != 0) rSend &= ~FLAGZ;
+	if((rr & 0x80) != 0) rSend |= FLAGN;
+	return rr;
+}
+
+
+int
+_nbcd(int xx)
+{
+	int dd, bc, corf, rr;
+	
+	dd = _u8(-xx - ((rSstart & FLAGX) != 0 ? 1 : 0));
+	bc = (xx | dd) & 0x88;
+	corf = bc - (bc >> 2);
+	rr = u8(dd - corf);
+	rSend &= ~(FLAGX|FLAGC|FLAGN|FLAGV);
+	if((bc | ~dd & rr) >> 7 != 0) rSend |= FLAGX|FLAGC;
+	if((dd & ~rr) >> 7 != 0) rSend |= FLAGV;
 	if(rr != 0) rSend &= ~FLAGZ;
 	if((rr & 0x80) != 0) rSend |= FLAGN;
 	return rr;
@@ -354,7 +503,6 @@ format(var x[])
 {
 	switch(x[0]){
 	case "add":
-	case "sub":
 	case "abcd":
 	case "adda":
 	case "addi":
@@ -387,6 +535,20 @@ format(var x[])
 	case "movem":
 	case "movep":
 	case "moveq":
+	case "muls":
+	case "mulu":
+	case "or":
+	case "ori":
+	case "rol":
+	case "ror":
+	case "roxl":
+	case "roxr":
+	case "sbcd":
+	case "sub":
+	case "subi":
+	case "suba":
+	case "subx":
+	case "subq":
 		return x[0].toUpperCase() + "." + x[1] + " " + formata(x[2]) + ", " + formata(x[3]);
 	case "andi_ccr":
 	case "clr":
@@ -394,7 +556,19 @@ format(var x[])
 	case "ext":
 	case "move_to_ccr":
 	case "move_from_sr":
+	case "nbcd":
+	case "neg":
+	case "negx":
+	case "not":
+	case "ori_to_ccr":
+	case "pea":
+	case "swap":
+	case "tas":
+	case "tst":
+	case "unlk":
 		return x[0].toUpperCase() + "." + x[1] + " " + formata(x[2]);
+	case "nop":
+		return x[0].toUpperCase();
 	default:
 		throw "dunno how to format " + (string)x;
 	}
@@ -422,7 +596,7 @@ simulate(var x[])
 		if(x[3][0] == "A" && s == "B") throw "404";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
-		m = _add(s, read(s, b, false), read(s, a, false), 0);
+		m = _add(s, read(s, b, false), read(s, a, false), 0, true);
 		write(s, b, m);
 		return;
 	case "adda":
@@ -441,7 +615,7 @@ simulate(var x[])
 			write("L", b, m);
 		}else{
 			b = _amode(s, x[3]);
-			m = _add(s, read(s, b, false), x[2][1], 0);
+			m = _add(s, read(s, b, false), x[2][1], 0, true);
 			write(s, b, m);
 		}
 		return;
@@ -449,7 +623,7 @@ simulate(var x[])
 		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
-		m = _add(s, read(s, b, false), read(s, a, false), (rSstart & FLAGX) != 0 ? 1 : 0);
+		m = _add(s, read(s, b, false), read(s, a, false), (rSstart & FLAGX) != 0 ? 1 : 0, false);
 		write(s, b, m);
 		return;
 	case "and":
@@ -493,19 +667,19 @@ simulate(var x[])
 		if(x[3][0] == "A" && s == "B") throw "404";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
-		_sub(s, read(s, b, false), read(s, a, false), 0, false);
+		_sub(s, read(s, b, false), read(s, a, false), 0, false, true);
 		return;
 	case "cmpa":
 		if(s == "B") throw "404";
 		a = _amode(s, x[2]);
 		b = _amode("L", x[3]);
-		_sub("L", read("L", b, false), read(s, a, true), 0, false);
+		_sub("L", read("L", b, false), read(s, a, true), 0, false, true);
 		return;
 	case "cmpm":
 		if(x[2][1] == x[3][1]) throw "no";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
-		_sub(s, read(s, b, false), read(s, a, false), 0, false);
+		_sub(s, read(s, b, false), read(s, a, false), 0, false, true);
 		return;
 	case "divs":
 		a = _amode("W", x[2]);
@@ -518,13 +692,6 @@ simulate(var x[])
 		b = _amode("L", x[3]);
 		m = _divu(read("L", b, false), read("W", a, false));
 		write("L", b, m);
-		return;
-	case "sub":
-		if(x[3][0] == "A" && s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _sub(s, read(s, b, false), read(s, a, false), 0, true);
-		write(s, b, m);
 		return;
 	case "eor":
 	case "eori":
@@ -665,6 +832,145 @@ simulate(var x[])
 		_nz("B", m);
 		write("L", b, m);
 		break;
+	case "muls":
+		a = _amode("W", x[2]);
+		b = _amode("L", x[3]);
+		m = _nz("L", read("W", a, true) * read("W", b, true));
+		write("L", b, m);
+		break;
+	case "mulu":
+		a = _amode("W", x[2]);
+		b = _amode("L", x[3]);
+		m = _nz("L", read("W", a, false) * read("W", b, false));
+		write("L", b, m);
+		break;
+	case "nbcd":
+		a = _amode(s, x[2]);
+		m = _nbcd(read(s, a, false));
+		write(s, a, m);
+		break;
+	case "neg":
+		a = _amode(s, x[2]);
+		write(s, a, _sub(s, 0, read(s, a, true), 0, true, true));
+		break;
+	case "negx":
+		a = _amode(s, x[2]);
+		write(s, a, _sub(s, 0, read(s, a, true), (rSstart & FLAGX) != 0 ? 1 : 0, true, false));
+		break;
+	case "nop":
+		break;
+	case "not":
+		a = _amode(s, x[2]);
+		write(s, a, _nz(s, ~read(s, a, true)));
+		break;
+	case "or":
+	case "ori":
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _nz(s, read(s, b, false) | read(s, a, false));
+		write(s, b, m);
+		return;
+	case "ori_ccr":
+		rSend |= x[2][1] & 0xff;
+		return;
+	case "pea":
+		write("L", "R15", read("L", "R15", false) - 4);
+		a = _amode(s, x[2]);
+		rval_addr("L", 15);
+		write("L", (string)read("L", "R15", false), (int)a);
+		break;
+	case "rol":
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _rol(s, read(s, b, false), read(s, a, false));
+		write(s, b, m);
+		return;
+	case "ror":
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _ror(s, read(s, b, false), read(s, a, false));
+		write(s, b, m);
+		return;
+	case "roxl":
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _roxl(s, read(s, b, false), read(s, a, false));
+		write(s, b, m);
+		return;
+	case "roxr":
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _roxr(s, read(s, b, false), read(s, a, false));
+		write(s, b, m);
+		return;
+	case "sbcd":
+		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _sbcd(read(s, b, false), read(s, a, false));
+		write(s, b, m);
+		return;
+	case "sub":
+	case "subi":
+		if(x[3][0] == "A" && s == "B") throw "404";
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _sub(s, read(s, b, false), read(s, a, false), 0, true, true);
+		write(s, b, m);
+		return;
+	case "suba":
+		if(s == "B") throw "404";
+		a = _amode(s, x[2]);
+		b = _amode("L", x[3]);
+		m = read("L", b, false) - read(s, a, true);
+		write("L", b, m);
+		return;
+	case "subq":
+		x[2][1] &= 7;
+		if(x[2][1] == 0) x[2][1] = 8;
+		if(x[3][0] == "A"){
+			b = _amode("L", x[3]);
+			m = read("L", b, false) - x[2][1];
+			write("L", b, m);
+		}else{
+			b = _amode(s, x[3]);
+			m = _sub(s, read(s, b, false), x[2][1], 0, true, true);
+			write(s, b, m);
+		}
+		return;
+	case "subx":
+		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
+		a = _amode(s, x[2]);
+		b = _amode(s, x[3]);
+		m = _sub(s, read(s, b, false), read(s, a, false), (rSstart & FLAGX) != 0 ? 1 : 0, true, false);
+		write(s, b, m);
+		return;
+	case "swap":
+		a = _amode("L", x[2]);
+		m = read("L", a, false);
+		m = m >>> 16 | m << 16;
+		_nz("L", m);
+		write("L", a, m);
+		break;
+	case "tas":
+		a = _amode(s, x[2]);
+		m = read(s, a, false);
+		_nz(s, m);
+		write(s, a, m | 0x80);
+		break;
+	case "tst":
+		a = _amode(s, x[2]);
+		m = read(s, a, false);
+		_nz(s, m);
+		break;
+	case "unlk":
+		rval_addr("L", 8+x[2][1]);
+		a = _amode(s, x[2]);
+		mem_sug("L", read("L", a, false), random(32) & ~1);
+		write("L", "R15", read("L", a, false));
+		write("L", a, read("L", (string)read("L", "R15", false), false));
+		write("L", "R15", read("L", "R15", false) + 4);
+		return;
 	default:
 		throw "dunno how to simulate " + (string)x;
 	}
@@ -723,8 +1029,6 @@ var encodetab[] = [
 	["cmpm", "$0", ["(A)+", "$1", "$"], ["(A)+", "$2", "$"]], var(a, b, c) return [0xB108 | s0[a]<<6 | c << 9 | b],
 	["divs", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0x81C0 | b<<9 | encamode(a, "d")].concat(amrest("W", a)),
 	["divu", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0x80C0 | b<<9 | encamode(a, "d")].concat(amrest("W", a)),
-	["sub", "$0", "$2", ["D", "$1", "$"]], var(a, b, c) return [0x9000 | s0[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
-	["sub", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0x9100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
 	["eor", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0xB100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
 	["eori", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0A00 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
 	["eori_ccr", "B", ["#imm", "$0"]], var(a) return [0x0A3C, a],
@@ -751,6 +1055,43 @@ var encodetab[] = [
 	["movep", "$0", ["D", "$1", "$"], ["(d16,A)", "$2", "$3", "$"]], var(a, b, c, d) return [0x0188 | s3[a]<<6 | b<<9 | c, d],
 	["movep", "$0", ["(d16,A)", "$2", "$3", "$"], ["D", "$1", "$"]], var(a, b, c, d) return [0x0108 | s3[a]<<6 | b<<9 | c, d],
 	["moveq", "L", ["#imm", "$0"], ["D", "$1", "$"]], var(a,b) return [0x7000 | b<<9 | _u8(a)],
+	["muls", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0xC1C0 | b<<9 | encamode(a, "da")].concat(amrest("W", a)),
+	["mulu", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0xC0C0 | b<<9 | encamode(a, "da")].concat(amrest("W", a)),
+	["nbcd", "B", "$0"], var(a) return [0x4800 | encamode(a, "da")].concat(amrest("W", a)),
+	["neg", "$0", "$1"], var(a, b) return [0x4400 | s0[a] << 6 | encamode(b, "da")].concat(amrest(a, b)),
+	["negx", "$0", "$1"], var(a, b) return [0x4000 | s0[a] << 6 | encamode(b, "da")].concat(amrest(a, b)),
+	["nop"], var() return [0x4E71],
+	["not", "$0", "$1"], var(a, b) return [0x4600 | s0[a] << 6 | encamode(b, "da")].concat(amrest(a, b)),
+	["or", "$0", "$2", ["D", "$1", "$"]], var(a, b, c) return [0x8000 | s0[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
+	["or", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0x8100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
+	["ori", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0000 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
+	["ori_ccr", "B", ["#imm", "$0"]], var(a) return [0x003C, a],
+	["pea", "L", "$0"], var(a) return [0x4840 | encamode(a, "c")].concat(amrest("L",a)),
+	["rol", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe138 | s0[a] << 6 | b << 9 | c],
+	["rol", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe118 | s0[a] << 6 | (b&7) << 9 | c],
+	["rol", "W", ["#imm", 1], "$0"], var(a) return [0xe7c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["ror", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe038 | s0[a] << 6 | b << 9 | c],
+	["ror", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe018 | s0[a] << 6 | (b&7) << 9 | c],
+	["ror", "W", ["#imm", 1], "$0"], var(a) return [0xe6c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["roxl", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe130 | s0[a] << 6 | b << 9 | c],
+	["roxl", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe110 | s0[a] << 6 | (b&7) << 9 | c],
+	["roxl", "W", ["#imm", 1], "$0"], var(a) return [0xe5c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["roxr", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe030 | s0[a] << 6 | b << 9 | c],
+	["roxr", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe010 | s0[a] << 6 | (b&7) << 9 | c],
+	["roxr", "W", ["#imm", 1], "$0"], var(a) return [0xe4c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["sbcd", "B", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0x8100 | c<<9 | b],
+	["sbcd", "B", ["-(A)", "$1", "$"], ["-(A)", "$2", "$"]], var(a, b, c) return [0x8108 | c<<9 | b],
+	["sub", "$0", "$2", ["D", "$1", "$"]], var(a, b, c) return [0x9000 | s0[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
+	["sub", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0x9100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
+	["suba", "$0", "$2", ["A", "$1", "$"]], var(a, b, c) return [0x9000 | s1[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
+	["subi", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0400 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
+	["subq", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x5100 | s0[a]<<6 | (b & 7) << 9 | encamode(c,"a")].concat(amrest(a,c)),
+	["subx", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0x9100 | s0[a] << 6 | c<<9 | b],
+	["subx", "$0", ["-(A)", "$1", "$"], ["-(A)", "$2", "$"]], var(a, b, c) return [0x9108 | s0[a] << 6 | c<<9 | b],
+	["swap", "W", ["D", "$0", "$"]], var(a) return [0x4840 | a],
+	["tas", "B", "$0"], var(a) return [0x4AC0 | encamode(a, "da")].concat(amrest("B", a)),
+	["tst", "$0", "$1"], var(a, b) return [0x4A00 | s0[a]<<6 | encamode(b, "")].concat(amrest(a, b)),
+	["unlk", "L", ["A", "$0", "$"]], var(a,b) return [0x4E58 | a],
 ];
 
 void
@@ -796,6 +1137,11 @@ test(void)
 	run(["exg", "L", An, An]);
 	run(["link", "W", An, ["#imm", "%R16"]]);
 	run(["moveq", "L", ["#imm", "%R8"], Dn]);
+	run(["ori_ccr", "B", ["#imm", "%R32"]]);
+	run(["sbcd", "B", Dn, Dn]);
+	run(["sbcd", "B", ["-(A)", "%r3", "%R32"], ["-(A)", "%r3", "%R32"]]);
+	run(["swap", "W", Dn]);
+	run(["unlk", "L", An]);
 	for(j = 0; j < 3; j++){
 		run(["addx", "BWL".substr(j,1), Dn, Dn]);
 		run(["addx", "BWL".substr(j,1), ["-(A)", "%r3", "%R32"], ["-(A)", "%r3", "%R32"]]);
@@ -810,6 +1156,16 @@ test(void)
 		run(["lsr", "BWL".substr(j,1), Dn, Dn]);	
 		run(["movep", "BWL".substr(j,1), Dn, ["(d16,A)", "%r3", "%r16", "%R32"]]);
 		run(["movep", "BWL".substr(j,1), ["(d16,A)", "%r3", "%r16", "%R32"], Dn]);
+		run(["rol", "BWL".substr(j,1), Imm8, Dn]);
+		run(["rol", "BWL".substr(j,1), Dn, Dn]);	
+		run(["ror", "BWL".substr(j,1), Imm8, Dn]);
+		run(["ror", "BWL".substr(j,1), Dn, Dn]);	
+		run(["roxl", "BWL".substr(j,1), Imm8, Dn]);
+		run(["roxl", "BWL".substr(j,1), Dn, Dn]);	
+		run(["roxr", "BWL".substr(j,1), Imm8, Dn]);
+		run(["roxr", "BWL".substr(j,1), Dn, Dn]);	
+		run(["subx", "BWL".substr(j,1), Dn, Dn]);
+		run(["subx", "BWL".substr(j,1), ["-(A)", "%r3", "%R32"], ["-(A)", "%r3", "%R32"]]);
 		for(k = 0; k < amodes.length; k++){
 			run(["add", "BWL".substr(j,1), Dn, amodes[k]]);
 			run(["add", "BWL".substr(j,1), amodes[k], Dn]);
@@ -819,8 +1175,6 @@ test(void)
 			run(["and", "BWL".substr(j,1), Dn, amodes[k]]);
 			run(["and", "BWL".substr(j,1), amodes[k], Dn]);
 			run(["andi", "BWL".substr(j,1), Imm, amodes[k]]);
-			run(["sub", "BWL".substr(j,1), Dn, amodes[k]]);
-			run(["sub", "BWL".substr(j,1), amodes[k], Dn]);
 			run(["clr", "BWL".substr(j,1), amodes[k]]);
 			run(["cmp", "BWL".substr(j,1), amodes[k], Dn]);
 			run(["cmpa", "BWL".substr(j,1), amodes[k], An]);
@@ -832,6 +1186,17 @@ test(void)
 				run(["move", "BWL".substr(j, 1), amodes[k], amodes[l]]);
 			run(["movem", "BWL".substr(j,1), ["list", "%R16"], amodes[k]]);
 			run(["movem", "BWL".substr(j,1), amodes[k], ["list", "%R16"]]);
+			run(["neg", "BWL".substr(j,1), amodes[k]]);
+			run(["negx", "BWL".substr(j,1), amodes[k]]);
+			run(["not", "BWL".substr(j,1), amodes[k]]);
+			run(["or", "BWL".substr(j,1), Dn, amodes[k]]);
+			run(["ori", "BWL".substr(j,1), Imm, amodes[k]]);
+			run(["sub", "BWL".substr(j,1), Dn, amodes[k]]);
+			run(["sub", "BWL".substr(j,1), amodes[k], Dn]);
+			run(["suba", "BWL".substr(j,1), amodes[k], An]);
+			run(["subi", "BWL".substr(j,1), Imm, amodes[k]]);
+			run(["subq", "BWL".substr(j,1), Imm8, amodes[k]]);
+			run(["tst", "BWL".substr(j,1), amodes[k]]);
 		}
 	}
 	for(k = 0; k < amodes.length; k++){
@@ -851,7 +1216,17 @@ test(void)
 		run(["lea", "L", amodes[k], An]);
 		run(["move_to_ccr", "W", amodes[k]]);
 		run(["move_from_sr", "W", amodes[k]]);
+		run(["muls", "W", amodes[k], Dn]);
+		run(["mulu", "W", amodes[k], Dn]);
+		run(["nbcd", "B", amodes[k]]);
+		run(["pea", "L", amodes[k]]);
+		run(["rol", "W", ["#imm", 1], amodes[k]]);
+		run(["ror", "W", ["#imm", 1], amodes[k]]);
+		run(["roxl", "W", ["#imm", 1], amodes[k]]);
+		run(["roxr", "W", ["#imm", 1], amodes[k]]);
+		run(["tas", "B", amodes[k]]);
 	}
+	run(["nop"]);
 }
 
 void
@@ -872,4 +1247,8 @@ tests(void)
 	ILLEGAL
 	JMP
 	JSR
+	RTR
+	RTS
+	Scc
+	TRAP*
 */
