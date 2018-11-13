@@ -219,10 +219,27 @@ derand(var x)
 
 int rstart[];
 int rend[];
-int rSstart, rSend;
+int _rSstart, _rSend;
+bool _x, _z, _n, _c, _v;
 int mem[string];
 int memwr_exp[string];
 int memwr_got[string];
+
+int
+_getccr(void)
+{
+	return (int)_x << 4 | (int)_n << 3 | (int)_z << 2 | (int)_v << 1 | (int)_c;
+}
+
+void
+_setccr(int v)
+{
+	_x = (v & FLAGX) != 0;
+	_v = (v & FLAGV) != 0;
+	_n = (v & FLAGN) != 0;
+	_z = (v & FLAGZ) != 0;
+	_c = (v & FLAGC) != 0;
+}
 
 int
 rval(int n)
@@ -535,7 +552,8 @@ run(var l[])
 	int pcstart, pcend;
 	
 	m = derand(l);
-	rSend = rSstart = random(5);
+	_rSstart = random(16) & 0xff1f;
+	_setccr(_rSstart);
 	mem = {};
 	memwr_exp = {};
 	memwr_got = {};
@@ -561,7 +579,8 @@ run(var l[])
 		r[i] = rstart[i];
 	}
 	pcend = pc;
-	rS = rSstart;
+	_rSend = _rSstart & ~0x1f | _getccr();
+	rS = _rSstart;
 	failmsg = "";
 	fail = false;
 	pc = pcstart;
@@ -572,7 +591,7 @@ run(var l[])
 		fail=true;
 	}
 	fail = fail || pc !== pcend;
-	fail = fail || rS !== rSend;
+	fail = fail || rS !== _rSend;
 	for(i = 0; i < 16; i++)
 		fail = fail || r[i] !== rval(i);
 	for(addr in mem)
@@ -596,10 +615,10 @@ run(var l[])
 			"<td><tt>" + X(pcend,8) + "</tt></td>" +
 			"<td><tt>" + X(pc,8) + "</tt></td>" +
 		"</tr>");
-		document.write("<tr" + (rSend!=rS ? " style=\"font-weight: bold\"": "") + ">" +
+		document.write("<tr" + (_rSend!=rS ? " style=\"font-weight: bold\"": "") + ">" +
 			"<td>SR</td>" +
-			"<td><tt>" + SRformat(rSstart) + "</tt></td>" +
-			"<td><tt>" + SRformat(rSend) + "</tt></td>" +
+			"<td><tt>" + SRformat(_rSstart) + "</tt></td>" +
+			"<td><tt>" + SRformat(_rSend) + "</tt></td>" +
 			"<td><tt>" + SRformat(rS) + "</tt></td>" +
 		"</tr>");
 		for(addr in mem){

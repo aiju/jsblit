@@ -4,9 +4,10 @@ _nz(string size, int a)
 	int b;
 	
 	b = _cast(size, a, true);
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
-	if(b == 0) rSend |= FLAGZ;
-	if(b < 0) rSend |= FLAGN;
+	_v = false;
+	_z = b == 0;
+	_n = b < 0;
+	_c = false;
 	return a;
 }
 
@@ -33,12 +34,10 @@ _add(string size, int a, int b, int c, bool zflag)
 	}
 	r = u(a) + u(b) + c;
 	t = s(a) + s(b) + c;
-	rSend &= ~(FLAGX|FLAGN|FLAGV|FLAGC);
-	if(zflag) rSend |= FLAGZ;
-	if(u(r) != 0) rSend &= ~FLAGZ;
-	if(u(r) != r) rSend |= FLAGC|FLAGX;
-	if(s(r) < 0) rSend |= FLAGN;
-	if(s(t) != t) rSend |= FLAGV;
+	_z = (_z || zflag) && u(r) == 0;
+	_c = _x = u(r) != r;
+	_n = s(r) < 0;
+	_v = s(t) != t;
 	return u(r);
 }
 
@@ -65,13 +64,11 @@ _sub(string size, int a, int b, int c, bool xflag, bool zflag)
 	}
 	r = u(a) - u(b) - c;
 	t = s(a) - s(b) - c;
-	rSend &= ~(FLAGN|FLAGV|FLAGC);
-	if(zflag) rSend |= FLAGZ;
-	if(u(r) != 0) rSend &= ~FLAGZ;
-	if(u(r) != r) rSend |= FLAGC;
-	if(s(r) < 0) rSend |= FLAGN;
-	if(s(t) != t) rSend |= FLAGV;
-	if(xflag) rSend = rSend & ~FLAGX | rSend << 4 & FLAGX;
+	_z = (_z || zflag) && u(r) == 0;
+	_c = u(r) != r;
+	_n = s(r) < 0;
+	_v = s(t) != t;
+	if(xflag) _x = _c;
 	return u(r);
 }
 
@@ -86,21 +83,16 @@ _asl(string size, int a, int b)
 	case "L": n = 32; break;
 	}
 	b &= 63;
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	_c = false;
+	_v = false;
 	for(i = 0; i < b; i++){
-		if((a >> n-1 & 1) != 0)
-			rSend |= FLAGX|FLAGC;
-		else
-			rSend &= ~(FLAGX|FLAGC);
-		if(((a << 1 ^ a) >> n-1 & 1) != 0)
-			rSend |= FLAGV;
+		_x = _c = (a >> n-1 & 1) != 0;
+		_v = _v || ((a << 1 ^ a) >> n-1 & 1) != 0;
 		a <<= 1;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -116,21 +108,16 @@ _asr(string size, int a, int b)
 	}
 	b &= 63;
 	a = _cast(size, a, true);
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	_c = false;
+	_v = false;
 	for(i = 0; i < b; i++){
-		if((a & 1) != 0)
-			rSend |= FLAGX|FLAGC;
-		else
-			rSend &= ~(FLAGX|FLAGC);
-		if(((a >> 1 ^ a) >> n-1 & 1) != 0)
-			rSend |= FLAGV;
+		_x = _c = (a & 1) != 0;
+		_v = _v || ((a >> 1 ^ a) >> n-1 & 1) != 0;
 		a >>= 1;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -145,19 +132,15 @@ _lsl(string size, int a, int b)
 	case "L": n = 32; break;
 	}
 	b &= 63;
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	_c = false;
+	_v = false;
 	for(i = 0; i < b; i++){
-		if((a >> n-1 & 1) != 0)
-			rSend |= FLAGX|FLAGC;
-		else
-			rSend &= ~(FLAGX|FLAGC);
+		_x = _c = (a >> n-1 & 1) != 0;
 		a <<= 1;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -172,19 +155,15 @@ _lsr(string size, int a, int b)
 	case "L": n = 32; break;
 	}
 	b &= 63;
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	_c = false;
+	_v = false;
 	for(i = 0; i < b; i++){
-		if((a & 1) != 0)
-			rSend |= FLAGX|FLAGC;
-		else
-			rSend &= ~(FLAGX|FLAGC);
+		_x = _c = (a & 1) != 0;
 		a >>>= 1;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -199,17 +178,16 @@ _rol(string size, int a, int b)
 	case "L": n = 32; break;
 	}
 	b &= 63;
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
 	a = _cast(size, a, false);
+	_c = false;
+	_v = false;
 	for(i = 0; i < b; i++){
-		a = a << 1 | a >> n-1 & 1;
-		rSend = rSend & ~FLAGC | a & 1;
+		a = a << 1 | a >>> n-1 & 1;
+		_c = (a & 1) != 0;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -225,21 +203,15 @@ _ror(string size, int a, int b)
 	}
 	b &= 63;
 	a = _cast(size, a, false);
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	_c = false;
+	_v = false;
 	for(i = 0; i < b; i++){
-		if((a & 1) != 0){
-			rSend |= FLAGC;
-			a = a >>> 1 | 1<<n-1;
-		}else{
-			rSend &= ~FLAGC;
-			a >>>= 1;
-		}
+		_c = (a & 1) != 0;
+		a = a >>> 1 | (a & 1) << n-1;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -254,21 +226,20 @@ _roxl(string size, int a, int b)
 	case "L": n = 32; break;
 	}
 	b &= 63;
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
+	_c = false;
+	_v = false;
 	a = _cast(size, a, false);
-	x = rSstart >> 4 & 1;
-	rSend = rSend & ~FLAGC | x;
+	x = (int)_x;
+	_c = _x;
 	for(i = 0; i < b; i++){
 		y = a >> n-1 & 1;
-		rSend = rSend & ~(FLAGC|FLAGX) | y << 4 | y;
+		_c = _x = y != 0;
 		a = a << 1 | x;
 		x = y;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
 	return r;
 }
 
@@ -284,20 +255,22 @@ _roxr(string size, int a, int b)
 	}
 	b &= 63;
 	a = _cast(size, a, false);
-	rSend &= ~(FLAGN|FLAGZ|FLAGV|FLAGC);
-	x = rSstart >> 4 & 1;
-	rSend = rSend & ~FLAGC | x;
+	_c = false;
+	_v = false;
+	a = _cast(size, a, false);
+	x = (int)_x;
+	_c = _x;
 	for(i = 0; i < b; i++){
 		y = a & 1;
-		rSend = rSend & ~(FLAGC|FLAGX) | y << 4 | y;
+		_c = _x = y != 0;
 		a = a >>> 1 | x << n-1;
 		x = y;
 	}
-	if((a >> n-1 & 1) != 0)
-		rSend |= FLAGN;
-	r = _cast(size, a, false);
-	if(r == 0)
-		rSend |= FLAGZ;
+	r = _cast(size, a, true);
+	_z = r == 0;
+	_n = r < 0;
+
+
 	return r;
 }
 
@@ -306,16 +279,15 @@ _abcd(int a, int b)
 {
 	int ss, bc, dc, corf, rr;
 	
-	ss = _u8(a + b + ((rSstart & FLAGX) != 0 ? 1 : 0));
+	ss = _u8(a + b + (int)_x);
 	bc = (a & b | ~ss & a | ~ss & b) & 0x88;
 	dc = ((ss + 0x66 ^ ss) & 0x110) >> 1;
 	corf = _u8((bc | dc) - ((bc | dc) >> 2));
 	rr = _u8(ss + corf);
-	rSend &= ~(FLAGX|FLAGC|FLAGN|FLAGV);
-	if((bc | ss & ~rr) >> 7 != 0) rSend |= FLAGX|FLAGC;
-	if((~ss & rr) >> 7 != 0) rSend |= FLAGV;
-	if(rr != 0) rSend &= ~FLAGZ;
-	if((rr & 0x80) != 0) rSend |= FLAGN;
+	_x = _c = _s8(bc | ss & ~rr) < 0;
+	_v = _s8(~ss & rr) < 0;
+	_z = _z && rr == 0;
+	_n = _s8(rr) < 0;
 	return rr;
 }
 
@@ -324,15 +296,14 @@ _sbcd(int a, int b)
 {
 	int dd, bc, dc, corf, rr;
 	
-	dd = _u8(a - b - ((rSstart & FLAGX) != 0 ? 1 : 0));
+	dd = _u8(a - b - (int)_x);
 	bc = (~a & b | dd & ~a | dd & b) & 0x88;
 	corf = _u8(bc - (bc >> 2));
 	rr = _u8(dd - corf);
-	rSend &= ~(FLAGX|FLAGC|FLAGN|FLAGV);
-	if((bc | ~dd & rr) >> 7 != 0) rSend |= FLAGX|FLAGC;
-	if((dd & ~rr) >> 7 != 0) rSend |= FLAGV;
-	if(rr != 0) rSend &= ~FLAGZ;
-	if((rr & 0x80) != 0) rSend |= FLAGN;
+	_x = _c = _s8(bc | ~dd & rr) < 0;
+	_v = _s8(dd & ~rr) < 0;
+	_z = _z && rr == 0;
+	_n = _s8(rr) < 0;
 	return rr;
 }
 
@@ -342,15 +313,14 @@ _nbcd(int xx)
 {
 	int dd, bc, corf, rr;
 	
-	dd = _u8(-xx - ((rSstart & FLAGX) != 0 ? 1 : 0));
+	dd = _u8(-xx - (int)_x);
 	bc = (xx | dd) & 0x88;
 	corf = bc - (bc >> 2);
 	rr = u8(dd - corf);
-	rSend &= ~(FLAGX|FLAGC|FLAGN|FLAGV);
-	if((bc | ~dd & rr) >> 7 != 0) rSend |= FLAGX|FLAGC;
-	if((dd & ~rr) >> 7 != 0) rSend |= FLAGV;
-	if(rr != 0) rSend &= ~FLAGZ;
-	if((rr & 0x80) != 0) rSend |= FLAGN;
+	_x = _c = _s8(bc | ~dd & rr) < 0;
+	_v = _s8(dd & ~rr) < 0;
+	_z = _z && rr == 0;
+	_n = _s8(rr) < 0;
 	return rr;
 }
 
@@ -365,10 +335,7 @@ _bop(string s, int a, int n, string op)
 	default: throw "_bchg";
 	}
 	k = 1<<n;
-	if((a & k) == 0)
-		rSend |= FLAGZ;
-	else
-		rSend &= ~FLAGZ;
+	_z = (a & k) == 0;
 	switch(op){
 	case "bchg": return a ^ k;
 	case "bclr": return a & ~k;
@@ -389,7 +356,8 @@ _divs(int a, int b)
 	r = a % b;
 	if((r^a)<0) r = -r;
 	if(_s16(q) != q){
-		rSend = rSend & ~FLAGC | FLAGV;
+		_c = false;
+		_v = true;
 		return _u32(a);
 	}else{
 		_nz("W", q);
@@ -408,7 +376,8 @@ _divu(int a, int b)
 	q = Math.floor(a / b);
 	r = a % b;
 	if(_u16(q) != q){
-		rSend = rSend & ~FLAGC | FLAGV;
+		_c = false;
+		_v = true;
 		return _u32(a);
 	}else{
 		_nz("W", q);
@@ -503,20 +472,20 @@ _checkcc(string s)
 	switch(s){
 	case "t": return true;
 	case "f": return false;
-	case "cc": return (rSend & FLAGC) == 0;
-	case "cs": return (rSend & FLAGC) != 0;
-	case "vc": return (rSend & FLAGV) == 0;
-	case "vs": return (rSend & FLAGV) != 0;
-	case "pl": return (rSend & FLAGN) == 0;
-	case "mi": return (rSend & FLAGN) != 0;
-	case "ne": return (rSend & FLAGZ) == 0;
-	case "eq": return (rSend & FLAGZ) != 0;
-	case "ge": return ((rSend & FLAGN) != 0) == ((rSend & FLAGV) != 0);
-	case "lt": return ((rSend & FLAGN) != 0) != ((rSend & FLAGV) != 0);
-	case "gt": return ((rSend & FLAGN) != 0) == ((rSend & FLAGV) != 0) && (rSend & FLAGZ) == 0;
-	case "le": return ((rSend & FLAGN) != 0) != ((rSend & FLAGV) != 0) || (rSend & FLAGZ) != 0;
-	case "hi": return (rSend & (FLAGC|FLAGZ)) == 0;
-	case "ls": return (rSend & (FLAGC|FLAGZ)) != 0;
+	case "cc": return !_c;
+	case "cs": return _c;
+	case "vc": return !_v;
+	case "vs": return _v;
+	case "pl": return !_n;
+	case "mi": return _n;
+	case "ne": return !_z;
+	case "eq": return _z;
+	case "ge": return _n == _v;
+	case "lt": return _n != _v;
+	case "gt": return _n == _v && !_z;
+	case "le": return _n != _v || _z;
+	case "hi": return !(_c || _z);
+	case "ls": return _c || _z;
 	default: throw "_checkcc";
 	}
 }
@@ -666,7 +635,7 @@ simulate(var x[])
 		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
-		m = _add(s, read(s, b, false), read(s, a, false), (rSstart & FLAGX) != 0 ? 1 : 0, false);
+		m = _add(s, read(s, b, false), read(s, a, false), (int)_x, false);
 		write(s, b, m);
 		return;
 	case "and":
@@ -677,7 +646,7 @@ simulate(var x[])
 		write(s, b, m);
 		return;
 	case "andi_ccr":
-		rSend &= ~0xff | x[2][1] & 0xff;
+		_setccr(_getccr() & x[2][1]);
 		pc += 2;
 		return;
 	case "asl":
@@ -734,7 +703,8 @@ simulate(var x[])
 	case "clr":
 		a = _amode(s, x[2]);
 		write(s, a, 0);
-		rSend = rSend & ~(FLAGN|FLAGV|FLAGC) | FLAGZ;
+		_n = _v = _c = false;
+		_z = true;
 		return;
 	case "cmp":
 	case "cmpi":
@@ -775,7 +745,7 @@ simulate(var x[])
 		write(s, b, m);
 		return;
 	case "eori_ccr":
-		rSend ^= x[2][1] & 0xff;
+		_setccr(_getccr() ^ x[2][1]);
 		pc += 2;
 		return;
 	case "exg":
@@ -850,11 +820,11 @@ simulate(var x[])
 		return;
 	case "move_to_ccr":
 		b = _amode(s, x[2]);
-		rSend = rSend & 0xff00 | read(s, b, false) & 0xff;
+		_setccr(read(s, b, false));
 		return;
 	case "move_from_sr":
 		b = _amode(s, x[2]);
-		write("W", b, rSend);
+		write("W", b, _rSstart);
 		return;
 	case "movem":
 		if(s == "B") throw "404";
@@ -934,7 +904,7 @@ simulate(var x[])
 		break;
 	case "negx":
 		a = _amode(s, x[2]);
-		write(s, a, _sub(s, 0, read(s, a, true), (rSstart & FLAGX) != 0 ? 1 : 0, true, false));
+		write(s, a, _sub(s, 0, read(s, a, true), (int)_x, true, false));
 		break;
 	case "nop":
 		break;
@@ -950,7 +920,7 @@ simulate(var x[])
 		write(s, b, m);
 		return;
 	case "ori_ccr":
-		rSend |= x[2][1] & 0xff;
+		_setccr(_getccr() | x[2][1]);
 		pc += 2;
 		return;
 	case "pea":
@@ -987,7 +957,7 @@ simulate(var x[])
 		m = rval_addr("L", 15);
 		mem_sug("W", m, random(32) & ~1);
 		mem_sug("L", m+2, random(32) & ~1);
-		rSend = rSend & 0xff00 | read("W", (string)m, false) & 0xff;
+		_setccr(read("W", (string)m, false));
 		pc = read("L", (string)_u32(m+2), false);
 		write("L", "R15", m + 6);
 		return;
@@ -1040,7 +1010,7 @@ simulate(var x[])
 		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
-		m = _sub(s, read(s, b, false), read(s, a, false), (rSstart & FLAGX) != 0 ? 1 : 0, true, false);
+		m = _sub(s, read(s, b, false), read(s, a, false), (int)_x, true, false);
 		write(s, b, m);
 		return;
 	case "swap":
