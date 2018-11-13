@@ -124,7 +124,7 @@ pop32(void)
 	v = memread(r[15]) << 16;
 	v |= memread(r[15] + 2);
 	r[15] = u32(r[15] + 4);
-	return v;
+	return u32(v);
 }
 
 int

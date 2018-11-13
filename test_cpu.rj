@@ -429,14 +429,14 @@ _movem_store(string s, var am, int l)
 			for(i = 0; i < 16; i++)
 				if((l>>i & 1) != 0){
 					a -= 2;
-					write("W", (string)a, rval(15-i));
+					write("W", (string)_u32(a), rval(15-i));
 				}
 			break;
 		case "L":
 			for(i = 0; i < 16; i++)
 				if((l>>i & 1) != 0){
 					a -= 4;
-					write("L", (string)a, rval(15-i));
+					write("L", (string)_u32(a), rval(15-i));
 				}
 			break;
 		}
@@ -448,14 +448,14 @@ _movem_store(string s, var am, int l)
 		case "W":
 			for(i = 0; i < 16; i++)
 				if((l>>i & 1) != 0){
-					write("W", (string)a, rval(i));
+					write("W", (string)_u32(a), rval(i));
 					a += 2;
 				}
 			break;
 		case "L":
 			for(i = 0; i < 16; i++)
 				if((l>>i & 1) != 0){
-					write("L", (string)a, rval(i));
+					write("L", (string)_u32(a), rval(i));
 					a += 4;
 				}
 			break;
@@ -479,16 +479,16 @@ _movem_load(string s, var am, int l)
 	case "W":
 		for(i = 0; i < 16; i++)
 			if((l>>i & 1) != 0){
-				mem_sug("W", a, random(16));
-				rend[i] = _u32(read("W", (string)a, true));
+				mem_sug("W", _u32(a), random(16));
+				rend[i] = _u32(read("W", (string)_u32(a), true));
 				a += 2;
 			}
 		break;
 	case "L":
 		for(i = 0; i < 16; i++)
 			if((l>>i & 1) != 0){
-				mem_sug("L", a, random(32));
-				rend[i] = read("L", (string)a, false);
+				mem_sug("L", _u32(a), random(32));
+				rend[i] = read("L", (string)_u32(a), false);
 				a += 4;
 			}
 		break;
@@ -497,6 +497,29 @@ _movem_load(string s, var am, int l)
 		write("L", "R"+(string)(8+am[1]), a);
 }
 
+bool
+_checkcc(string s)
+{
+	switch(s){
+	case "t": return true;
+	case "f": return false;
+	case "cc": return (rSend & FLAGC) == 0;
+	case "cs": return (rSend & FLAGC) != 0;
+	case "vc": return (rSend & FLAGV) == 0;
+	case "vs": return (rSend & FLAGV) != 0;
+	case "pl": return (rSend & FLAGN) == 0;
+	case "mi": return (rSend & FLAGN) != 0;
+	case "ne": return (rSend & FLAGZ) == 0;
+	case "eq": return (rSend & FLAGZ) != 0;
+	case "ge": return ((rSend & FLAGN) != 0) == ((rSend & FLAGV) != 0);
+	case "lt": return ((rSend & FLAGN) != 0) != ((rSend & FLAGV) != 0);
+	case "gt": return ((rSend & FLAGN) != 0) == ((rSend & FLAGV) != 0) && (rSend & FLAGZ) == 0;
+	case "le": return ((rSend & FLAGN) != 0) != ((rSend & FLAGV) != 0) || (rSend & FLAGZ) != 0;
+	case "hi": return (rSend & (FLAGC|FLAGZ)) == 0;
+	case "ls": return (rSend & (FLAGC|FLAGZ)) != 0;
+	default: throw "_checkcc";
+	}
+}
 
 string
 format(var x[])
@@ -554,24 +577,44 @@ format(var x[])
 	case "clr":
 	case "eori_ccr":
 	case "ext":
+	case "jmp":
 	case "move_to_ccr":
 	case "move_from_sr":
 	case "nbcd":
 	case "neg":
 	case "negx":
 	case "not":
-	case "ori_to_ccr":
+	case "ori_ccr":
 	case "pea":
 	case "swap":
 	case "tas":
 	case "tst":
 	case "unlk":
 		return x[0].toUpperCase() + "." + x[1] + " " + formata(x[2]);
+	case "bcc":
+		return "B" + x[1].toUpperCase() + " " + formata(x[2]);
+	case "dbcc":
+		return "DB" + x[1].toUpperCase() + " " + formata(x[2]) + ", " + formata(x[3]);
+	case "scc":
+		return "S" + x[2].toUpperCase() + "." + x[1] + " " + formata(x[2]);
+	case "bsr":
+		return x[0].toUpperCase() + " " + formata(x[1]);
 	case "nop":
+	case "rtr":
+	case "rts":
 		return x[0].toUpperCase();
 	default:
 		throw "dunno how to format " + (string)x;
 	}
+}
+
+void
+_skipbra(var disp)
+{
+	if(disp[1] > 0x8000 || disp[1] <= -0x8000)
+			pc += 4;
+	else if(disp[1] == 0 || disp[1] == -1 || disp[1] < -0x80 || disp[1] >= 0x80)
+			pc += 2;
 }
 
 void
@@ -635,27 +678,58 @@ simulate(var x[])
 		return;
 	case "andi_ccr":
 		rSend &= ~0xff | x[2][1] & 0xff;
+		pc += 2;
 		return;
 	case "asl":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _asl(s, read(s, b, false), read(s, a, false));
 		write(s, b, m);
 		return;
 	case "asr":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _asr(s, read(s, b, false), read(s, a, false));
 		write(s, b, m);
+		return;
+	case "bcc":
+		if(_checkcc(x[1]))
+			pc = _u32(pc + x[2][1]);
+		else
+			_skipbra(x[2]);
+		return;
+	case "dbcc":
+		if(!_checkcc(x[1])){
+			a = _amode("W", x[2]);
+			m = _s16(read("W", a, true) - 1);
+			write("W", a, m);
+			if(m != -1)
+				pc = _u32(pc + _s16(x[3][1]));
+			else
+				pc += 2;
+		}else
+			pc += 2;
 		return;
 	case "bchg":
 	case "btst":
 	case "bclr":
 	case "bset":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _bop(s, read(s, b, false), read(s, a, false), x[0]);
 		if(x[0] != "btst") write(s, b, m);
+		return;
+	case "bsr":
+		rval_addr("L", 15);
+		if(x[1][1] > 0x8000 || x[1][1] <= -0x8000)
+			m = pc + 4;
+		else if(x[1][1] == 0 || x[1][1] == -1 || x[1][1] < -0x80 || x[1][1] >= 0x80)
+			m = pc + 2;
+		else
+			m = pc;
+		write("L", "R15", read("L", "R15", false) - 4);
+		write("L", (string)read("L", "R15", false), m);
+		pc = _u32(pc + x[1][1]);
 		return;
 	case "clr":
 		a = _amode(s, x[2]);
@@ -702,6 +776,7 @@ simulate(var x[])
 		return;
 	case "eori_ccr":
 		rSend ^= x[2][1] & 0xff;
+		pc += 2;
 		return;
 	case "exg":
 		a = _amode(s, x[2]);
@@ -728,6 +803,10 @@ simulate(var x[])
 			return;
 		default: throw "size";
 		}
+	case "jmp":
+		a = _amode(s, x[2]);
+		pc = (int)a;
+		break;
 	case "lea":
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
@@ -779,6 +858,7 @@ simulate(var x[])
 		return;
 	case "movem":
 		if(s == "B") throw "404";
+		pc += 2;
 		if(x[2][0] == "list")
 			_movem_store(s, x[3], x[2][1]);
 		else
@@ -826,9 +906,8 @@ simulate(var x[])
 		}
 		break;
 	case "moveq":
-		a = _amode("B", x[2]);
 		b = _amode("L", x[3]);
-		m = read("B", a, true);
+		m = _s8(x[2][1]);
 		_nz("B", m);
 		write("L", b, m);
 		break;
@@ -872,6 +951,7 @@ simulate(var x[])
 		return;
 	case "ori_ccr":
 		rSend |= x[2][1] & 0xff;
+		pc += 2;
 		return;
 	case "pea":
 		write("L", "R15", read("L", "R15", false) - 4);
@@ -880,28 +960,42 @@ simulate(var x[])
 		write("L", (string)read("L", "R15", false), (int)a);
 		break;
 	case "rol":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _rol(s, read(s, b, false), read(s, a, false));
 		write(s, b, m);
 		return;
 	case "ror":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _ror(s, read(s, b, false), read(s, a, false));
 		write(s, b, m);
 		return;
 	case "roxl":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _roxl(s, read(s, b, false), read(s, a, false));
 		write(s, b, m);
 		return;
 	case "roxr":
-		a = _amode(s, x[2]);
+		a = _amode("B", x[2]);
 		b = _amode(s, x[3]);
 		m = _roxr(s, read(s, b, false), read(s, a, false));
 		write(s, b, m);
+		return;
+	case "rtr":
+		m = rval_addr("L", 15);
+		mem_sug("W", m, random(32) & ~1);
+		mem_sug("L", m+2, random(32) & ~1);
+		rSend = rSend & 0xff00 | read("W", (string)m, false) & 0xff;
+		pc = read("L", (string)_u32(m+2), false);
+		write("L", "R15", m + 6);
+		return;
+	case "rts":
+		m = rval_addr("L", 15);
+		mem_sug("L", m, random(32) & ~1);
+		pc = read("L", (string)m, false);
+		write("L", "R15", m + 4);
 		return;
 	case "sbcd":
 		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
@@ -909,6 +1003,10 @@ simulate(var x[])
 		b = _amode(s, x[3]);
 		m = _sbcd(read(s, b, false), read(s, a, false));
 		write(s, b, m);
+		return;
+	case "scc":
+		a = _amode(s, x[3]);
+		write(s, a, _checkcc(x[2]) ? -1 : 0);
 		return;
 	case "sub":
 	case "subi":
@@ -985,6 +1083,7 @@ var s0[string] = {"B": 0, "W": 1, "L": 2};
 var s1[string] = {"W": 3, "L": 7};
 var s2[string] = {"B": 1, "W": 3, "L": 2};
 var s3[string] = {"W": 0, "L": 1};
+var cc[string] = {"t": 0, "f": 1, "hi": 2, "ls": 3, "cc": 4, "cs": 5, "ne": 6, "eq": 7, "vc": 8, "vs": 9, "pl": 10, "mi": 11, "ge": 12, "lt": 13, "gt": 14, "le": 15};
 var encodetab[] = [
 	["abcd", "B", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xC100 | c<<9 | b],
 	["abcd", "B", ["-(A)", "$1", "$"], ["-(A)", "$2", "$"]], var(a, b, c) return [0xC108 | c<<9 | b],
@@ -992,7 +1091,7 @@ var encodetab[] = [
 	["add", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0xD100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
 	["adda", "$0", "$2", ["A", "$1", "$"]], var(a, b, c) return [0xD000 | s1[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
 	["addi", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0600 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
-	["addq", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x5000 | s0[a]<<6 | (b & 7) << 9 | encamode(c,"a")].concat(amrest(a,c)),
+	["addq", "$0", ["#imm8", "$1"], "$2"], var(a, b, c) return [0x5000 | s0[a]<<6 | (b & 7) << 9 | encamode(c,"a")].concat(amrest(a,c)),
 	["addx", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xD100 | s0[a] << 6 | c<<9 | b],
 	["addx", "$0", ["-(A)", "$1", "$"], ["-(A)", "$2", "$"]], var(a, b, c) return [0xD108 | s0[a] << 6 | c<<9 | b],
 	["and", "$0", "$2", ["D", "$1", "$"]], var(a, b, c) return [0xC000 | s0[a]<<6 | b<<9 | encamode(c,"d")].concat(amrest(a,c)),
@@ -1000,11 +1099,12 @@ var encodetab[] = [
 	["andi", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0200 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
 	["andi_ccr", "B", ["#imm", "$0"]], var(a) return [0x023C, a],
 	["asl", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe120 | s0[a] << 6 | b << 9 | c],
-	["asl", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe100 | s0[a] << 6 | (b&7) << 9 | c],
-	["asl", "W", ["#imm", 1], "$0"], var(a) return [0xe1c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["asl", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe100 | s0[a] << 6 | (b&7) << 9 | c],
+	["asl", "W", ["#imm8", 1], "$0"], var(a) return [0xe1c0 | encamode(a,"ma")].concat(amrest("W",a)),
 	["asr", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe020 | s0[a] << 6 | b << 9 | c],
-	["asr", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe000 | s0[a] << 6 | (b&7) << 9 | c],
-	["asr", "W", ["#imm", 1], "$0"], var(a) return [0xe0c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["asr", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe000 | s0[a] << 6 | (b&7) << 9 | c],
+	["asr", "W", ["#imm8", 1], "$0"], var(a) return [0xe0c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["bcc", "$0", "$1"], var(a, b) return [0x6000 | cc[a] << 8 | encamode(b,"")].concat(amrest("W",b)),
 	["bchg", "L", ["#imm", "$0"], ["D", "$1", "$"]], var(a, b) return [0x0840 | b, a],
 	["bchg", "L", ["D", "$0", "$"], ["D", "$1", "$"]], var(a, b) return [0x0140 | a << 9 | b],
 	["bchg", "B", ["#imm", "$0"], "$1"], var(a, b) return [0x0840 | encamode(b, "ma"), a].concat(amrest("B",b)),
@@ -1017,6 +1117,7 @@ var encodetab[] = [
 	["bset", "L", ["D", "$0", "$"], ["D", "$1", "$"]], var(a, b) return [0x01c0 | a << 9 | b],
 	["bset", "B", ["#imm", "$0"], "$1"], var(a, b) return [0x08c0 | encamode(b, "ma"), a].concat(amrest("B",b)),
 	["bset", "B", ["D", "$0", "$"], "$1"], var(a, b) return [0x01c0 | a << 9 | encamode(b, "ma")].concat(amrest("B",b)),
+	["bsr", "$0"], var(a) return [0x6100 | encamode(a,"")].concat(amrest("W",a)),
 	["btst", "L", ["#imm", "$0"], ["D", "$1", "$"]], var(a, b) return [0x0800 | b, a],
 	["btst", "L", ["D", "$0", "$"], ["D", "$1", "$"]], var(a, b) return [0x0100 | a << 9 | b],
 	["btst", "B", ["#imm", "$0"], "$1"], var(a, b) return [0x0800 | encamode(b, "ma"), a].concat(amrest("B",b)),
@@ -1027,6 +1128,7 @@ var encodetab[] = [
 	["cmpa", "$0", "$2", ["A", "$1", "$"]], var(a, b, c) return [0xB000 | s1[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
 	["cmpi", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0C00 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
 	["cmpm", "$0", ["(A)+", "$1", "$"], ["(A)+", "$2", "$"]], var(a, b, c) return [0xB108 | s0[a]<<6 | c << 9 | b],
+	["dbcc", "$0", ["D", "$1", "$"], ["#imm", "$2"]], var(a, b, c) return [0x50C8 | cc[a] << 8 | b, c],
 	["divs", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0x81C0 | b<<9 | encamode(a, "d")].concat(amrest("W", a)),
 	["divu", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0x80C0 | b<<9 | encamode(a, "d")].concat(amrest("W", a)),
 	["eor", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0xB100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
@@ -1036,14 +1138,15 @@ var encodetab[] = [
 	["exg", "L", ["D", "$0", "$"], ["A", "$1", "$"]], var(a,b) return [0xC188 | a<<9 | b],
 	["exg", "L", ["A", "$0", "$"], ["A", "$1", "$"]], var(a,b) return [0xC148 | a<<9 | b],
 	["ext", "$0", ["D", "$1", "$"]], var(a,b) return [0x4800 | s0[a]+1<<6 | b],
+	["jmp", "W", "$0"], var(a) return [0x4EC0 | encamode(a, "c")].concat(amrest("W",a)),
 	["lea", "L", "$0", ["A", "$1", "$"]], var(a,b) return [0x41C0 | b<<9 | encamode(a, "c")].concat(amrest("L",a)),
 	["link", "W", ["A", "$0", "$"], ["#imm", "$1"]], var(a,b) return [0x4E50 | a, b],
 	["lsl", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe128 | s0[a] << 6 | b << 9 | c],
-	["lsl", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe108 | s0[a] << 6 | (b&7) << 9 | c],
-	["lsl", "W", ["#imm", 1], "$0"], var(a) return [0xe3c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["lsl", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe108 | s0[a] << 6 | (b&7) << 9 | c],
+	["lsl", "W", ["#imm8", 1], "$0"], var(a) return [0xe3c0 | encamode(a,"ma")].concat(amrest("W",a)),
 	["lsr", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe028 | s0[a] << 6 | b << 9 | c],
-	["lsr", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe008 | s0[a] << 6 | (b&7) << 9 | c],
-	["lsr", "W", ["#imm", 1], "$0"], var(a) return [0xe2c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["lsr", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe008 | s0[a] << 6 | (b&7) << 9 | c],
+	["lsr", "W", ["#imm8", 1], "$0"], var(a) return [0xe2c0 | encamode(a,"ma")].concat(amrest("W",a)),
 	["move", "$0", "$1", "$2"], var(a,b,c) return [s2[a]<<12 | _swap6(encamode(c,"da"))<<6 | encamode(b,"")].concat(amrest(a,b)).concat(amrest(a,c)),
 	["movea", "$0", "$1", ["A", "$2", "$"]], var(a,b,c) return [s2[a]<<12 | c<<9 | 1<<6 | encamode(b,"")].concat(amrest(a,b)),
 	["move_to_ccr", "W", "$0"], var(a) return [0x44C0 | encamode(a, "d")].concat(amrest("W", a)),
@@ -1068,24 +1171,27 @@ var encodetab[] = [
 	["ori_ccr", "B", ["#imm", "$0"]], var(a) return [0x003C, a],
 	["pea", "L", "$0"], var(a) return [0x4840 | encamode(a, "c")].concat(amrest("L",a)),
 	["rol", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe138 | s0[a] << 6 | b << 9 | c],
-	["rol", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe118 | s0[a] << 6 | (b&7) << 9 | c],
-	["rol", "W", ["#imm", 1], "$0"], var(a) return [0xe7c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["rol", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe118 | s0[a] << 6 | (b&7) << 9 | c],
+	["rol", "W", ["#imm8", 1], "$0"], var(a) return [0xe7c0 | encamode(a,"ma")].concat(amrest("W",a)),
 	["ror", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe038 | s0[a] << 6 | b << 9 | c],
-	["ror", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe018 | s0[a] << 6 | (b&7) << 9 | c],
-	["ror", "W", ["#imm", 1], "$0"], var(a) return [0xe6c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["ror", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe018 | s0[a] << 6 | (b&7) << 9 | c],
+	["ror", "W", ["#imm8", 1], "$0"], var(a) return [0xe6c0 | encamode(a,"ma")].concat(amrest("W",a)),
 	["roxl", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe130 | s0[a] << 6 | b << 9 | c],
-	["roxl", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe110 | s0[a] << 6 | (b&7) << 9 | c],
-	["roxl", "W", ["#imm", 1], "$0"], var(a) return [0xe5c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["roxl", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe110 | s0[a] << 6 | (b&7) << 9 | c],
+	["roxl", "W", ["#imm8", 1], "$0"], var(a) return [0xe5c0 | encamode(a,"ma")].concat(amrest("W",a)),
 	["roxr", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe030 | s0[a] << 6 | b << 9 | c],
-	["roxr", "$0", ["#imm", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe010 | s0[a] << 6 | (b&7) << 9 | c],
-	["roxr", "W", ["#imm", 1], "$0"], var(a) return [0xe4c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["roxr", "$0", ["#imm8", "$1"], ["D", "$2", "$"]], var(a, b, c) return [0xe010 | s0[a] << 6 | (b&7) << 9 | c],
+	["roxr", "W", ["#imm8", 1], "$0"], var(a) return [0xe4c0 | encamode(a,"ma")].concat(amrest("W",a)),
+	["rtr"], var(a) return [0x4E77],
+	["rts"], var(a) return [0x4E75],
 	["sbcd", "B", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0x8100 | c<<9 | b],
 	["sbcd", "B", ["-(A)", "$1", "$"], ["-(A)", "$2", "$"]], var(a, b, c) return [0x8108 | c<<9 | b],
+	["scc", "B", "$0", "$1"], var(a, b) return [0x50C0 | cc[a] << 8 | encamode(b,"da")].concat(amrest("W",b)),
 	["sub", "$0", "$2", ["D", "$1", "$"]], var(a, b, c) return [0x9000 | s0[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
 	["sub", "$0", ["D", "$1", "$"], "$2"], var(a, b, c) return [0x9100 | s0[a]<<6 | b<<9 | encamode(c,"ma")].concat(amrest(a,c)),
 	["suba", "$0", "$2", ["A", "$1", "$"]], var(a, b, c) return [0x9000 | s1[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
 	["subi", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x0400 | s0[a]<<6 | encamode(c,"da")].concat(amrest(a,["#imm",b])).concat(amrest(a,c)),
-	["subq", "$0", ["#imm", "$1"], "$2"], var(a, b, c) return [0x5100 | s0[a]<<6 | (b & 7) << 9 | encamode(c,"a")].concat(amrest(a,c)),
+	["subq", "$0", ["#imm8", "$1"], "$2"], var(a, b, c) return [0x5100 | s0[a]<<6 | (b & 7) << 9 | encamode(c,"a")].concat(amrest(a,c)),
 	["subx", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0x9100 | s0[a] << 6 | c<<9 | b],
 	["subx", "$0", ["-(A)", "$1", "$"], ["-(A)", "$2", "$"]], var(a, b, c) return [0x9108 | s0[a] << 6 | c<<9 | b],
 	["swap", "W", ["D", "$0", "$"]], var(a) return [0x4840 | a],
@@ -1114,30 +1220,31 @@ test(void)
 		["(xxx).L", "%r32", "%R32"],
 		["#imm", "%R32"],
 	];
+	string ccs[] = ["t", "f", "hi", "ls", "cc", "cs", "ne", "eq", "vc", "vs", "pl", "mi", "ge", "lt", "gt", "le"];
 	var Dn = amodes[0];
 	var An = amodes[1];
 	var Imm = ["#imm", "%R32"];
-	var Imm8 = ["#imm", "%s8"];
+	var Imm8 = ["#imm8", "%s8"];
 	
 	run(["abcd", "B", Dn, Dn]);
 	run(["abcd", "B", ["-(A)", "%r3", "%R32"], ["-(A)", "%r3", "%R32"]]);
-	run(["andi_ccr", "B", ["#imm", "%R32"]]);
-	run(["bchg", "L", Imm, Dn]);
+	run(["andi_ccr", "B", ["#imm", "%R16"]]);
+	run(["bchg", "L", ["#imm", "%r16"], Dn]);
 	run(["bchg", "L", Dn, Dn]);
-	run(["bclr", "L", Imm, Dn]);
+	run(["bclr", "L", ["#imm", "%r16"], Dn]);
 	run(["bclr", "L", Dn, Dn]);
-	run(["bset", "L", Imm, Dn]);
+	run(["bset", "L", ["#imm", "%r16"], Dn]);
 	run(["bset", "L", Dn, Dn]);
-	run(["btst", "L", Imm, Dn]);
+	run(["btst", "L", ["#imm", "%r16"], Dn]);
 	run(["btst", "L", Dn, Dn]);
 	run(["cmpm", "B", ["(A)+", "%r3", "%R32"], ["(A)+", "%r3", "%R32"]]);
-	run(["eori_ccr", "B", ["#imm", "%R32"]]);
+	run(["eori_ccr", "B", ["#imm", "%R16"]]);
 	run(["exg", "L", Dn, Dn]);
 	run(["exg", "L", Dn, An]);
 	run(["exg", "L", An, An]);
 	run(["link", "W", An, ["#imm", "%R16"]]);
 	run(["moveq", "L", ["#imm", "%R8"], Dn]);
-	run(["ori_ccr", "B", ["#imm", "%R32"]]);
+	run(["ori_ccr", "B", ["#imm", "%R16"]]);
 	run(["sbcd", "B", Dn, Dn]);
 	run(["sbcd", "B", ["-(A)", "%r3", "%R32"], ["-(A)", "%r3", "%R32"]]);
 	run(["swap", "W", Dn]);
@@ -1200,8 +1307,8 @@ test(void)
 		}
 	}
 	for(k = 0; k < amodes.length; k++){
-		run(["asl", "W", ["#imm", 1], amodes[k]]);
-		run(["asr", "W", ["#imm", 1], amodes[k]]);
+		run(["asl", "W", ["#imm8", 1], amodes[k]]);
+		run(["asr", "W", ["#imm8", 1], amodes[k]]);
 		run(["bchg", "B", Imm, amodes[k]]);
 		run(["bchg", "B", Dn, amodes[k]]);
 		run(["bclr", "B", Imm, amodes[k]]);
@@ -1213,6 +1320,7 @@ test(void)
 //		run(["chk", "W", amodes[k], Dn]);
 		run(["divs", "W", amodes[k], Dn]);
 		run(["divu", "W", amodes[k], Dn]);
+		run(["jmp", "W", amodes[k]]);
 		run(["lea", "L", amodes[k], An]);
 		run(["move_to_ccr", "W", amodes[k]]);
 		run(["move_from_sr", "W", amodes[k]]);
@@ -1220,13 +1328,23 @@ test(void)
 		run(["mulu", "W", amodes[k], Dn]);
 		run(["nbcd", "B", amodes[k]]);
 		run(["pea", "L", amodes[k]]);
-		run(["rol", "W", ["#imm", 1], amodes[k]]);
-		run(["ror", "W", ["#imm", 1], amodes[k]]);
-		run(["roxl", "W", ["#imm", 1], amodes[k]]);
-		run(["roxr", "W", ["#imm", 1], amodes[k]]);
+		run(["rol", "W", ["#imm8", 1], amodes[k]]);
+		run(["ror", "W", ["#imm8", 1], amodes[k]]);
+		run(["roxl", "W", ["#imm8", 1], amodes[k]]);
+		run(["roxr", "W", ["#imm8", 1], amodes[k]]);
 		run(["tas", "B", amodes[k]]);
 	}
 	run(["nop"]);
+	run(["rtr"]);
+	run(["rts"]);
+	for(j = 0; j < 16; j++){
+		if(ccs[j] != "f")
+			run(["bcc", ccs[j], ["#disp", "%R32"]]);
+		run(["dbcc", ccs[j], Dn, ["#imm", "%R16"]]);
+		for(k = 0; k < amodes.length; k++)
+			run(["scc", "B", ccs[j], amodes[k]]);
+	}
+	run(["bsr", ["#disp", "%R32"]]);
 }
 
 void
@@ -1240,15 +1358,7 @@ tests(void)
 
 /*
 	missing:
-	branches
-	BSR
 	CHK
-	DBcc
 	ILLEGAL
-	JMP
-	JSR
-	RTR
-	RTS
-	Scc
 	TRAP*
 */
