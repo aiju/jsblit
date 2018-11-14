@@ -316,7 +316,7 @@ _nbcd(int xx)
 	dd = _u8(-xx - (int)_x);
 	bc = (xx | dd) & 0x88;
 	corf = bc - (bc >> 2);
-	rr = u8(dd - corf);
+	rr = _u8(dd - corf);
 	_x = _c = _s8(bc | ~dd & rr) < 0;
 	_v = _s8(dd & ~rr) < 0;
 	_z = _z && rr == 0;
@@ -351,7 +351,7 @@ _divs(int a, int b)
 
 	a = _s32(a);
 	b = _s16(b);
-	if(b == 0) throw "no";
+	if(b == 0) throw "reroll";
 	q = Math.trunc(a / b);
 	r = a % b;
 	if((r^a)<0) r = -r;
@@ -361,7 +361,7 @@ _divs(int a, int b)
 		return _u32(a);
 	}else{
 		_nz("W", q);
-		return u16(q) | u16(r) << 16;
+		return _u16(q) | _u16(r) << 16;
 	}
 }
 
@@ -372,7 +372,7 @@ _divu(int a, int b)
 
 	a = _u32(a);
 	b = _u16(b);
-	if(b == 0) throw "no";
+	if(b == 0) throw "reroll";
 	q = Math.floor(a / b);
 	r = a % b;
 	if(_u16(q) != q){
@@ -381,7 +381,7 @@ _divu(int a, int b)
 		return _u32(a);
 	}else{
 		_nz("W", q);
-		return u16(q) | u16(r) << 16;
+		return _u16(q) | _u16(r) << 16;
 	}
 }
 
@@ -392,7 +392,7 @@ _movem_store(string s, var am, int l)
 	int a, i;
 	
 	if(am[0] == "-(A)"){
-		a = rval_addr(s, 8+am[1]);
+		a = rval(8+am[1]);
 		switch(s){
 		case "W":
 			for(i = 0; i < 16; i++)
@@ -439,7 +439,7 @@ _movem_load(string s, var am, int l)
 	int a, i;
 	
 	if(am[0] == "(A)+")
-		a = rval_addr(s, 8+am[1]);
+		a = rval(8+am[1]);
 	else{
 		sa = _amode(s, am);
 		a = (int)sa;
@@ -508,7 +508,6 @@ format(var x[])
 	case "btst":
 	case "bclr":
 	case "bset":
-	case "chk":
 	case "cmp":
 	case "cmpa":
 	case "cmpi":
@@ -565,7 +564,7 @@ format(var x[])
 	case "dbcc":
 		return "DB" + x[1].toUpperCase() + " " + formata(x[2]) + ", " + formata(x[3]);
 	case "scc":
-		return "S" + x[2].toUpperCase() + "." + x[1] + " " + formata(x[2]);
+		return "S" + x[2].toUpperCase() + "." + x[1] + " " + formata(x[3]);
 	case "bsr":
 		return x[0].toUpperCase() + " " + formata(x[1]);
 	case "nop":
@@ -587,17 +586,190 @@ _skipbra(var disp)
 }
 
 void
+_amodecheck(var size, var x[])
+{
+	int a;
+
+	if(size == "B")
+		return;
+	switch(x[0]){
+	case "D":
+	case "A":
+		break;
+	case "(A)":
+	case "(A)+":
+	case "-(A)":
+		if((rval(8+x[1]) & 1) != 0)
+			rstart[8+x[1]] = _u32(rstart[8+x[1]] ^ 1);
+		break;
+	case "(d16,A)":
+		if((rval(8+x[1]) & 1) != 0)
+			rstart[8+x[1]] = _u32(rstart[8+x[1]] ^ 1);
+		if((x[2] & 1) != 0)
+			x[2] = _u32(x[2] & ~1);
+		break;
+	case "(d16,PC)":
+	case "(xxx).W":
+	case "(xxx).L":
+		if((x[1] & 1) != 0)
+			x[1] = _u32(x[1] ^ 1);
+		break;
+	case "(d8,A,X.W)":
+	case "(d8,A,X.L)":
+		if((rval(8+x[1]) & 1) != 0)
+			rstart[8+x[1]] = _u32(rstart[8+x[1]] & ~1);
+		if((rval(x[2]) & 1) != 0)
+			rstart[x[2]] = _u32(rstart[x[2]] & ~1);
+		if((x[3] & 1) != 0)
+			x[3] = _u32(x[3] & ~1);
+		break;
+	case "(d8,PC,X.W)":
+	case "(d8,PC,X.L)":
+		if((rval(x[1]) & 1) != 0)
+			rstart[x[1]] = _u32(rstart[x[1]] & ~1);
+		if((x[2] & 1) != 0)
+			x[2] = _u32(x[2] & ~1);
+		break;
+	case "#imm":
+	case "#imm8":
+	case "#disp":
+	case "list":
+		break;
+	default:
+		throw "_amodecheck " + x[0];
+	}
+}
+
+void
+_ind_amodecheck(var size, var x[])
+{
+	_amodecheck("L", x);
+	if(size == "B")
+		return;
+	switch(x[0]){
+	case "A":
+		if((rval(8+x[1]) & 1) != 0)
+			rstart[8+x[1]] ^= 1;
+		break;
+	default:
+		throw "_ind_amodecheck";
+	}
+}
+
+void
+_addrcheck(var x[])
+{
+	switch(x[0]){
+	case "add":
+	case "abcd":
+	case "adda":
+	case "addi":
+	case "addq":
+	case "addx":
+	case "and":
+	case "andi":
+	case "asl":
+	case "asr":
+	case "bchg":
+	case "btst":
+	case "bclr":
+	case "bset":
+	case "cmp":
+	case "cmpa":
+	case "cmpi":
+	case "cmpm":
+	case "divs":
+	case "divu":
+	case "eor":
+	case "eori":
+	case "exg":
+	case "lea":
+	case "lsl":
+	case "lsr":
+	case "move":
+	case "movea":
+	case "movem":
+	case "movep":
+	case "moveq":
+	case "muls":
+	case "mulu":
+	case "or":
+	case "ori":
+	case "rol":
+	case "ror":
+	case "roxl":
+	case "roxr":
+	case "sbcd":
+	case "sub":
+	case "subi":
+	case "suba":
+	case "subx":
+	case "subq":
+		_amodecheck(x[1], x[2]);
+		_amodecheck(x[1], x[3]);
+		break;
+	case "clr":
+	case "neg":
+	case "negx":
+	case "tst":
+	case "not":
+	case "pea":
+	case "move_from_sr":
+	case "move_to_ccr":
+	case "jmp":
+		_amodecheck(x[1], x[2]);
+		break;
+	case "unlk":
+		_ind_amodecheck(x[1], x[2]);
+		break;
+	}
+}
+
+bool
+_gota7(var x[])
+{
+	int a;
+
+	switch(x[0]){
+	case "D":
+		return false;
+	case "A":
+	case "(A)":
+	case "(A)+":
+	case "-(A)":
+	case "(d16,A)":
+		return x[1] == 7;
+	case "(d16,PC)":
+	case "(xxx).W":
+	case "(xxx).L":
+		return false;
+	case "(d8,A,X.W)":
+	case "(d8,A,X.L)":
+		return x[1] == 7 || x[2] == 15;
+	case "(d8,PC,X.W)":
+	case "(d8,PC,X.L)":
+		return x[1] == 15;
+	case "#imm":
+	case "#imm8":
+	case "#disp":
+	case "list":
+		return false;
+	default:
+		throw "_gota7 " + x[0];
+	}
+
+}
+
+void
 simulate(var x[])
 {
 	string a, b, s;
 	int m, n;
 
-	rstart = new Array(16);
-	rend = new Array(16);
 	s = x[1];
 	switch(x[0]){
 	case "abcd":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
+		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
 		m = _abcd(read(s, b, false), read(s, a, false));
@@ -632,7 +804,7 @@ simulate(var x[])
 		}
 		return;
 	case "addx":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
+		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";	
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
 		m = _add(s, read(s, b, false), read(s, a, false), (int)_x, false);
@@ -689,7 +861,6 @@ simulate(var x[])
 		if(x[0] != "btst") write(s, b, m);
 		return;
 	case "bsr":
-		rval_addr("L", 15);
 		if(x[1][1] > 0x8000 || x[1][1] <= -0x8000)
 			m = pc + 4;
 		else if(x[1][1] == 0 || x[1][1] == -1 || x[1][1] < -0x80 || x[1][1] >= 0x80)
@@ -720,7 +891,7 @@ simulate(var x[])
 		_sub("L", read("L", b, false), read(s, a, true), 0, false, true);
 		return;
 	case "cmpm":
-		if(x[2][1] == x[3][1]) throw "no";
+		if(x[2][1] == x[3][1]) throw "undef";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
 		_sub(s, read(s, b, false), read(s, a, false), 0, false, true);
@@ -785,7 +956,6 @@ simulate(var x[])
 	case "link":
 		a = _amode("L", x[2]);
 		b = _amode("W", x[3]);
-		rval_addr("L", 15);
 		write("L", "R15", read("L", "R15", false) - 4);
 		write("L", (string)read("L", "R15", false), read("L", a, false));
 		write("L", a, read("L", "R15", false));
@@ -805,6 +975,8 @@ simulate(var x[])
 		return;
 	case "move":
 		if(x[3][0] == "A" && s == "B") throw "404";
+		if(x[2][0] == "A" && x[3][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";
+		if(x[2][0] == "A" && x[3][0] == "(A)+" && x[2][1] == x[3][1]) throw "undef";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
 		m = read(s, a, false);
@@ -840,7 +1012,7 @@ simulate(var x[])
 		if(a[0] == "R"){
 			m = read(s, a, false);
 			switch(s){
-			case "B": throw "no";
+			case "B": throw "404";
 			case "W":
 				write("B", b, m >> 8);
 				write("B", (string)((int)b+2), m);
@@ -855,7 +1027,7 @@ simulate(var x[])
 		}else{
 			m = read(s, a, false);
 			switch(s){
-			case "B": throw "no";
+			case "B": throw "404";
 			case "W":
 				mem_sug("B", ((int)a+2), random(8));
 				m = read("B", a, false) << 8;
@@ -924,9 +1096,9 @@ simulate(var x[])
 		pc += 2;
 		return;
 	case "pea":
+		if(_gota7(x[2])) throw "undef";
 		write("L", "R15", read("L", "R15", false) - 4);
 		a = _amode(s, x[2]);
-		rval_addr("L", 15);
 		write("L", (string)read("L", "R15", false), (int)a);
 		break;
 	case "rol":
@@ -954,7 +1126,7 @@ simulate(var x[])
 		write(s, b, m);
 		return;
 	case "rtr":
-		m = rval_addr("L", 15);
+		m = rval(15);
 		mem_sug("W", m, random(32) & ~1);
 		mem_sug("L", m+2, random(32) & ~1);
 		_setccr(read("W", (string)m, false));
@@ -962,13 +1134,13 @@ simulate(var x[])
 		write("L", "R15", m + 6);
 		return;
 	case "rts":
-		m = rval_addr("L", 15);
+		m = rval(15);
 		mem_sug("L", m, random(32) & ~1);
 		pc = read("L", (string)m, false);
 		write("L", "R15", m + 4);
 		return;
 	case "sbcd":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
+		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
 		m = _sbcd(read(s, b, false), read(s, a, false));
@@ -1007,7 +1179,7 @@ simulate(var x[])
 		}
 		return;
 	case "subx":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "no";
+		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";	
 		a = _amode(s, x[2]);
 		b = _amode(s, x[3]);
 		m = _sub(s, read(s, b, false), read(s, a, false), (int)_x, true, false);
@@ -1032,7 +1204,7 @@ simulate(var x[])
 		_nz(s, m);
 		break;
 	case "unlk":
-		rval_addr("L", 8+x[2][1]);
+		if(_gota7(x[2])) throw "undef";
 		a = _amode(s, x[2]);
 		mem_sug("L", read("L", a, false), random(32) & ~1);
 		write("L", "R15", read("L", a, false));
@@ -1092,7 +1264,6 @@ var encodetab[] = [
 	["btst", "L", ["D", "$0", "$"], ["D", "$1", "$"]], var(a, b) return [0x0100 | a << 9 | b],
 	["btst", "B", ["#imm", "$0"], "$1"], var(a, b) return [0x0800 | encamode(b, "ma"), a].concat(amrest("B",b)),
 	["btst", "B", ["D", "$0", "$"], "$1"], var(a, b) return [0x0100 | a << 9 | encamode(b, "ma")].concat(amrest("B",b)),
-	["chk", "W", "$0", ["D", "$1", "$"]], var(a, b) return [0x4180 | b << 9 | encamode(a, "da")].concat(amrest("W",a)),
 	["clr", "$0", "$1"], var(a, b) return [0x4200 | s0[a] << 6 | encamode(b, "da")].concat(amrest(a,b)),
 	["cmp", "$0", "$2", ["D", "$1", "$"]], var(a, b, c) return [0xB000 | s0[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
 	["cmpa", "$0", "$2", ["A", "$1", "$"]], var(a, b, c) return [0xB000 | s1[a]<<6 | b<<9 | encamode(c,"")].concat(amrest(a,c)),
@@ -1183,7 +1354,7 @@ test(void)
 		["(d16,A)", "%r3", "%R16", "%R32"],
 		["(d8,A,X.W)", "%r3", "%r4", "%r8", "%R32"],
 		["(d8,A,X.L)", "%r3", "%r4", "%r8", "%R32"],
-		["(d16,PC)", "%r3", "%R16", "%R32"],
+		["(d16,PC)", "%R16", "%R32"],
 		["(d8,PC,X.W)", "%r4", "%r8", "%R32"],
 		["(d8,PC,X.L)", "%r4", "%r8", "%R32"],
 		["(xxx).W", "%r16", "%R32"],
@@ -1287,7 +1458,6 @@ test(void)
 		run(["bset", "B", Dn, amodes[k]]);
 		run(["btst", "B", Imm, amodes[k]]);
 		run(["btst", "B", Dn, amodes[k]]);
-//		run(["chk", "W", amodes[k], Dn]);
 		run(["divs", "W", amodes[k], Dn]);
 		run(["divu", "W", amodes[k], Dn]);
 		run(["jmp", "W", amodes[k]]);
@@ -1322,13 +1492,7 @@ tests(void)
 {
 	int i;
 	
-	for(i = 0; i < 10; i++)
-		test();
+	test();
+	_table();
+	window.setTimeout(tests, 0);
 }
-
-/*
-	missing:
-	CHK
-	ILLEGAL
-	TRAP*
-*/
