@@ -35,50 +35,12 @@ undef(void)
 }
 
 int
-u8(int x)
-{
-	return x & 0xff;
-}
-
-int
-u16(int x)
-{
-	return x & 0xffff;
-}
-
-int
-u32(int x)
-{
-	x |= 0;
-	if(x < 0) x += 4294967296;
-	return x;
-}
-
-int
-s8(int x)
-{
-	return u32(x<<24>>24);
-}
-
-int
-s16(int x)
-{
-	return u32(x<<16>>16);
-}
-
-int
-s32(int x)
-{
-	return u32(x);
-}
-
-int
 fetch16(void)
 {
 	int v;
 	
 	v = memread(pc);
-	pc = u32(pc + 2);
+	pc = (0|pc + 2);
 	return v;
 }
 
@@ -88,13 +50,13 @@ fetch32(void)
 	int v;
 	
 	v = fetch16() << 16;
-	return u32(v | fetch16());
+	return (v | fetch16());
 }
 
 void
 push16(int u)
 {
-	r[15] = u32(r[15] - 2);
+	r[15] = 0|r[15] - 2;
 	memwrite(r[15], u, 0xffff);
 }
 
@@ -104,14 +66,14 @@ pop16(void)
 	int v;
 	
 	v = memread(r[15]);
-	r[15] = u32(r[15] + 2);
+	r[15] = 0|r[15] + 2;
 	return v;
 }
 
 void
 push32(int u)
 {
-	r[15] = u32(r[15] - 4);
+	r[15] = 0|r[15] - 4;
 	memwrite(r[15], u >> 16, 0xffff);
 	memwrite(r[15] + 2, u, 0xffff);
 }
@@ -123,12 +85,12 @@ pop32(void)
 	
 	v = memread(r[15]) << 16;
 	v |= memread(r[15] + 2);
-	r[15] = u32(r[15] + 4);
-	return u32(v);
+	r[15] = 0|r[15] + 4;
+	return v;
 }
 
 int
-amode(int m, int n, int s)
+amode(int m, int n, int s)[]
 {
 	int w, v;
 	
@@ -137,123 +99,123 @@ amode(int m, int n, int s)
 	s &= 3;
 	if(n == 7 && s == 0) s++;
 	switch(m){
-	case 0: return -(n+1);
-	case 1: return -(n+9);
+	case 0: return [0,n];
+	case 1: return [0,n+8];
 	case 2:
 		tim += s == 2 ? 8 : 4;
-		return r[8+n];
+		return [r[8+n]];
 	case 3:
 		v = r[8+n];
-		r[8+n] = u32(r[8+n] + (1<<s));
+		r[8+n] = 0|r[8+n] + (1<<s);
 		tim += s == 2 ? 8 : 4;
-		return v;
+		return [v];
 	case 4:
 		tim += s == 2 ? 10 : 6;
-		r[8+n] = u32(r[8+n] - (1<<s));
-		return r[8+n];
+		r[8+n] = 0|r[8+n] - (1<<s);
+		return [r[8+n]];
 	case 5:
 		tim += s == 2 ? 12 : 8;
-		return u32(r[8+n] + s16(fetch16()));
+		return [0|r[8+n] + (fetch16()<<16>>16)];
 	case 6:
 		tim += s == 2 ? 14 : 10;
 		w = fetch16();
 		v = r[w >> 12];
 		if((w & 1<<11) == 0)
-			v = s16(v);
-		return u32(r[8+n] + v + s8(w));
+			v = v<<16>>16;
+		return [0|r[8+n] + v + (w<<24>>24)];
 	case 7:
 		switch(n){
 		case 0:
 			tim += s == 2 ? 12 : 8;
-			return u32(s16(fetch16()));
+			return [fetch16()<<16>>16];
 		case 1:
 			tim += s == 2 ? 16 : 12;
-			return fetch32();
+			return [fetch32()];
 		case 2:
 			tim += s == 2 ? 12 : 8;
 			v = fetch16();
-			return u32(pc + s16(v) - 2);
+			return [0|pc + (v<<16>>16) - 2];
 		case 3:
 			tim += s == 2 ? 14 : 4;
 			w = fetch16();
 			v = r[w >> 12];
 			if((w & 1<<11) == 0)
-				v = s16(v);
-			return u32(pc + v + s8(w) - 2);
+				v = v<<16>>16;
+			return [0|pc + v + (w<<24>>24) - 2];
 		case 4:
 			tim += s == 2 ? 8 : 4;
 			v = pc;
-			pc = u32(pc + (1<<s));
+			pc = 0|pc + (1<<s);
 			if(s == 0){
 				v = pc;
-				pc = u32(pc + 1);
+				pc = 0|pc + 1;
 			}
-			return v;
+			return [v];
 		default:
 			undef();
 		}
 	default:
 		undef();
-		return 0;
+		return [0];
 	}
 }
 
 int
-rmode(int a, int s)
+rmode(int a[], int s)
 {
 	int v;
 
-	if(a >= 0)
+	if(a.length == 1)
 		switch(s & 3){
 		case 0:
-			v = memread(a);
-			if((a & 1) == 0)
+			v = memread(a[0]);
+			if((a[0] & 1) == 0)
 				v >>= 8;
-			return s8(v);
+			return v<<24>>24;
 		default:
-			return s16(memread(a));
+			return memread(a[0])<<16>>16;
 		case 2:
-			v = memread(a) << 16;
-			return s32(v | memread(a + 2));
+			v = memread(a[0]) << 16;
+			return v | memread(a[0] + 2);
 		}
-	v=r[-(a+1)];
+	v=r[a[1]];
 	switch(s & 3){
-	case 0: return s8(v);
-	case 1: return s16(v);
+	case 0: return v<<24>>24;
+	case 1: return v<<16>>16;
 	default: return v;
 	}
 }
 
 void
-wmode(int a, int s, int v)
+wmode(int a[], int s, int v)
 {
 	int n;
 
-	if(a >= 0)
+	if(a.length == 1)
 		switch(s & 3){
 		case 0:
-			memwrite(a, u8(v) * 0x101, (a & 1) != 0 ? 0xff : 0xff00);
+			memwrite(a[0], (v & 0xff) * 0x101, (a[0] & 1) != 0 ? 0xff : 0xff00);
 			return;
 		default:
-			memwrite(a, v, 0xffff);
+			memwrite(a[0], v, 0xffff);
 			return;
 		case 2:
-			memwrite(a, v >> 16, 0xffff);
-			memwrite(a + 2, v, 0xffff);
+			memwrite(a[0], v >> 16, 0xffff);
+			memwrite(a[0] + 2, v, 0xffff);
 			return;
 		}
-	n = -(a+1);
+	n = a[1];
 	if(n < 8)
 		switch(s){
-		case 0: r[n] = u32(r[n] & 0xffffff00 | v & 0xff); break;
-		case 1: r[n] = u32(r[n] & 0xffff0000 | v & 0xffff); break;
-		default: r[n] = u32(v);
+		case 0: r[n] = r[n] & 0xffffff00 | v & 0xff; break;
+		case 1: r[n] = r[n] & 0xffff0000 | v & 0xffff; break;
+		default: r[n] = v;
 		}
 	else{
 		if(s == 1)
-			r[n] = s16(v);
+			r[n] = v<<16>>16;
 		else
-			r[n] = u32(v);
+			r[n] = v;
 	}
 }
 
@@ -261,14 +223,14 @@ void
 nz(int v, int s)
 {
 	switch(s){
-	case 0: v = s8(v); break;
-	case 1: v = s16(v); break;
-	default: v = u32(v); break;
+	case 0: v = v<<24>>24; break;
+	case 1: v = v<<16>>16; break;
+	default: v = 0|v; break;
 	}
 	rS &= ~(FLAGC|FLAGN|FLAGV|FLAGZ);
 	if(v == 0)
 		rS |= FLAGZ;
-	if((v & 1<<31) != 0)
+	if(v < 0)
 		rS |= FLAGN;
 }
 
@@ -277,43 +239,46 @@ add(int u, int w, int c, int s)
 {
 	int v;
 	
+	u = 0|u;
+	w = 0|w;
+	c = 0|c;
 	rS &= ~(FLAGN|FLAGV|FLAGC);
 	switch(s){
 	case 0:
-		v = u8(w) + u8(u) + c;
+		v = 0|(w & 0xff) + (u & 0xff) + c;
 		if(v >= 0x100)
 			rS |= FLAGC;
 		if((v & 0x80) != 0)
 			rS |= FLAGN;
 		if((~(w ^ u) & (v ^ u) & 0x80) != 0)
 			rS |= FLAGV;
-		if(u8(v) != 0)
+		if((v & 0xff) != 0)
 			rS &= ~FLAGZ;
 		break;
 	case 1:
-		v = u16(w) + u16(u) + c;
+		v = 0|(w & 0xffff) + (u & 0xffff) + c;
 		if(v >= 0x10000)
 			rS |= FLAGC;
 		if((v & 0x8000) != 0)
 			rS |= FLAGN;
 		if((~(w ^ u) & (v ^ u) & 0x8000) != 0)
 			rS |= FLAGV;
-		if(u16(v) != 0)
+		if((v & 0xffff) != 0)
 			rS &= ~FLAGZ;
 		break;
 	default:
-		v = u32(w) + u32(u) + c;
-		if(v >= 0x100000000)
+		v = 0|w + u + c;
+		if((w & u | ~v & (w | u)) < 0)
 			rS |= FLAGC;
-		if((v & 0x80000000) != 0)
+		if(v < 0)
 			rS |= FLAGN;
 		if((~(w ^ u) & (v ^ u) & 0x80000000) != 0)
 			rS |= FLAGV;
-		if(u32(v) != 0)
+		if(v != 0)
 			rS &= ~FLAGZ;
 		break;
 	}
-	return u32(v);
+	return v;
 }
 
 int
@@ -324,40 +289,40 @@ sub(int u, int w, int c, int s)
 	rS &= ~(FLAGN|FLAGV|FLAGC);
 	switch(s){
 	case 0:
-		v = u8(u) - u8(w) - c;
+		v = 0|(u & 0xff) - (w & 0xff) - c;
 		if(v < 0)
 			rS |= FLAGC;
 		if((v & 0x80) != 0)
 			rS |= FLAGN;
 		if(((w ^ u) & (v ^ u) & 0x80) != 0)
 			rS |= FLAGV;
-		if(u8(v) != 0)
+		if((v & 0xff) != 0)
 			rS &= ~FLAGZ;
 		break;
 	case 1:
-		v = u16(u) - u16(w) - c;
+		v = 0|(u & 0xffff) - (w & 0xffff) - c;
 		if(v < 0)
 			rS |= FLAGC;
 		if((v & 0x8000) != 0)
 			rS |= FLAGN;
 		if(((w ^ u) & (v ^ u) & 0x8000) != 0)
 			rS |= FLAGV;
-		if(u16(v) != 0)
+		if((v & 0xffff) != 0)
 			rS &= ~FLAGZ;
 		break;
 	default:
-		v = u32(u) - u32(w) - c;
-		if(v < 0)
+		v = 0|(0|u) - (0|w) - c;
+		if((~u & w | v & (~u | w)) < 0)
 			rS |= FLAGC;
-		if((v & 0x80000000) != 0)
+		if(v < 0)
 			rS |= FLAGN;
 		if(((w ^ u) & (v ^ u) & 0x80000000) != 0)
 			rS |= FLAGV;
-		if(u32(v) != 0)
+		if(v != 0)
 			rS &= ~FLAGZ;
 		break;
 	}
-	return u32(v);
+	return v;
 }
 
 bool
@@ -439,10 +404,10 @@ addbcd(int a, int b)
 	
 	a &= 0xff;
 	b &= 0xff;
-	r = a + b + (rS >> 4 & 1);
+	r = 0|a + b + (rS >> 4 & 1);
 	bc = ((a ^ b ^ r) & 0x110) >> 1;
 	dc = ((r + 0x66 ^ r) & 0x110) >> 1;
-	s = _u8(r + (bc | dc) - ((bc | dc) >> 2));
+	s = (r + (bc | dc) - ((bc | dc) >> 2)) & 0xff;
 	rS &= ~(FLAGC|FLAGX|FLAGN|FLAGV);
 	if(((bc | (r & ~s)) & 0x80) != 0)
 		rS |= FLAGC|FLAGX;
@@ -462,9 +427,9 @@ subbcd(int a, int b)
 	
 	a &= 0xff;
 	b &= 0xff;
-	r = a - b - (rS >> 4 & 1);
+	r = 0|a - b - (rS >> 4 & 1);
 	bc = ((a ^ b ^ r) & 0x110) >> 1;
-	s = _u8(r - (bc - (bc >> 2)));
+	s = (r - (bc - (bc >> 2))) & 0xff;
 	rS &= ~(FLAGC|FLAGX|FLAGN|FLAGV);
 	if(((bc | (~r & s)) & 0x80) != 0)
 		rS |= FLAGC|FLAGX;
@@ -534,14 +499,13 @@ trap(int n, int pcv)
 	push16(sr);
 	pc = memread(v * 4) << 16;
 	pc |= memread(v * 4 + 2);
-	pc = u32(pc);
 	stop = false;
 }
 
 void
 logic(int op, int s)
 {
-	int a, n, v;
+	int a[], n, v;
 
 	a = amode(op >> 3, op, s);
 	n = (op >> 9) & 7;
@@ -552,7 +516,7 @@ logic(int op, int s)
 	case 12: v &= r[n]; break;
 	}
 	if((op & 0x100) == 0)
-		a = ~n;
+		a = [0,n];
 	wmode(a, s, v);
 	nz(v, s);
 	dtime(op, s);
@@ -563,8 +527,8 @@ cpureset(void)
 {
 	int v, i;
 	
-	r[15] = u32(memread(0) << 16 | memread(2));
-	pc = u32(memread(4) << 16 | memread(6));
+	r[15] = memread(0) << 16 | memread(2);
+	pc = memread(4) << 16 | memread(6);
 	rS = 0x2700;
 	for(i = 7, v = 0; i >= 0; i--){
 		irqla[i] = v;
@@ -577,6 +541,7 @@ X(int a, int n)
 {
 	string s;
 	
+	if(a === undefined) return "undefined";
 	s = a.toString(16);
 	if(s.length >= n)
 		return s;
@@ -618,7 +583,8 @@ state(void)
 int
 step(void)
 {
-	int v, w, a, s, n, m, d, cnt, op;
+	int v, w, u, s, n, m, d, cnt, op;
+	int a[];
 	bool b;
 	
 	tim = 0;
@@ -654,7 +620,7 @@ step(void)
 			}
 			if(s != 1)
 				v = v & 0xff | rS & 0xff00;
-			rS = u32(v) & 0xff1f;
+			rS = v & 0xff1f;
 			if(s == 1 && (rS & FLAGS) == 0){
 				v = r[15];
 				r[15] = asp;
@@ -664,32 +630,32 @@ step(void)
 			break;
 		}
 		if((op & 0x138) == 0x108){ /* MOVEP */
-			a = r[8 | op & 7] + s16(fetch16());
+			a = [r[8 | op & 7] + (fetch16()<<16>>16)];
 			switch(s){
 			case 0:
-				v = u8(rmode(a, 0)) << 8;
-				v |= u8(rmode(a + 2, 0));
-				r[n] = u32(r[n] & 0xffff0000 | v);
+				v = (rmode(a, 0) & 0xff) << 8;
+				v |= (rmode([a[0] + 2], 0) & 0xff);
+				r[n] = r[n] & 0xffff0000 | v;
 				tim += 16;
 				break;
 			case 1:
-				v = u8(rmode(a, 0)) << 24;
-				v |= u8(rmode(a + 2, 0)) << 16;
-				v |= u8(rmode(a + 4, 0)) << 8;
-				v |= u8(rmode(a + 6, 0));
+				v = (rmode(a, 0) & 0xff) << 24;
+				v |= (rmode([a[0] + 2], 0) & 0xff) << 16;
+				v |= (rmode([a[0] + 4], 0) & 0xff) << 8;
+				v |= (rmode([a[0] + 6], 0) & 0xff);
 				tim += 24;
-				r[n] = u32(v);
+				r[n] = v;
 				break;
 			case 2:
 				wmode(a, 0, r[n] >> 8);
-				wmode(a + 2, 0, r[n]);
+				wmode([a[0] + 2], 0, r[n]);
 				tim += 16;
 				break;
 			case 3:
 				wmode(a, 0, r[n] >> 24);
-				wmode(a + 2, 0, r[n] >> 16);
-				wmode(a + 4, 0, r[n] >> 8);
-				wmode(a + 6, 0, r[n]);
+				wmode([a[0] + 2], 0, r[n] >> 16);
+				wmode([a[0] + 4], 0, r[n] >> 8);
+				wmode([a[0] + 6], 0, r[n]);
 				tim += 24;
 				break;
 			}
@@ -728,7 +694,7 @@ step(void)
 			break;
 		}
 		switch(s){
-		case 0: w = s8(fetch16()); break;
+		case 0: w = fetch16()<<24>>24; break;
 		default: w = fetch16(); break;
 		case 2: w = fetch32(); break;
 		}
@@ -743,7 +709,7 @@ step(void)
 		case 6: rS |= FLAGZ; sub(v, w, 0, s); break;
 		default: undef();
 		}
-		if(a < 0)
+		if(a.length == 2)
 			tim += s == 2 ? (n == 1 || n == 6 ? 14 : 16) : 8;
 		else
 			tim += s == 2 ? 20 : 12;
@@ -762,7 +728,7 @@ step(void)
 		break;
 	case 4:
 		if((op & 0x1c0) == 0x1c0){ /* LEA */
-			r[8+n] = amode(op >> 3, op, 2);
+			r[8+n] = amode(op >> 3, op, 2)[0];
 			break;
 		}
 		if((op & 0x1c0) == 0x180){ /* CHK */
@@ -779,31 +745,31 @@ step(void)
 			w = fetch16();
 			if((op & 0x38) == 0x18){
 				n = op & 7;
-				a = r[8+n];
+				a = [r[8+n]];
 				for(m = 0; m < 16; m++){
 					if((w & 1) != 0){
 						r[m] = rmode(a, s);
-						a = u32(a + (1<<s));
+						a = [0 | a[0] + (1<<s)];
 						tim += 2<<s;
 					}
 					w >>= 1;
 				}
-				r[8+n] = u32(a);
+				r[8+n] = a[0];
 				tim += 12;
 				break;
 			}
 			if((op & 0x38) == 0x20){
 				n = op & 7;
-				a = r[8+n];
+				a = [r[8+n]];
 				for(m = 0; m < 16; m++){
 					if((w & 1) != 0){
-						a = u32(a - (1<<s));
+						a = [0 | a[0] - (1<<s)];
 						wmode(a, s, r[15 - m]);
 						tim += 2<<s;
 					}
 					w >>= 1;
 				}
-				r[8+n] = a;
+				r[8+n] = a[0];
 				tim += 8;
 				break;
 			}
@@ -814,7 +780,7 @@ step(void)
 						r[m] = rmode(a, s);
 					else
 						wmode(a, s, r[m]);
-					a = u32(a + (1<<s));
+					a = [0 | a[0] + (1<<s)];
 					tim += 2<<s;
 				}
 				w >>= 1;
@@ -827,24 +793,24 @@ step(void)
 			if(s == 3){ /* MOVE from SR */
 				a = amode(op >> 3, op, 1);
 				wmode(a, 1, rS);
-				tim += a < 0 ? 6 : 8;
+				tim += a.length == 2 ? 6 : 8;
 				break;
 			} /* NEGX */
 			a = amode(op >> 3, op, s);
 			v = rmode(a, s);
 			wmode(a, s, sub(0, v, rS>>4 & 1, s));
 			rS = rS & ~FLAGX | rS << 4 & FLAGX;
-			stime(a < 0, s);
+			stime(a.length == 2, s);
 			break;
 		case 2: /* CLR */
 			a = amode(op >> 3, op, s);
 			wmode(a, s, 0);
 			nz(0, 0);
-			stime(a < 0, s);
+			stime(a.length == 2, s);
 			break;
 		case 4:
 			if(s == 3){ /* MOVE to CCR */
-				rS = u32(rS & 0xff00 | rmode(amode(op >> 3, op, 1), 1) & 0x1f);
+				rS = rS & 0xff00 | rmode(amode(op >> 3, op, 1), 1) & 0x1f;
 				tim += 12;
 				break;
 			} /* NEG */
@@ -853,7 +819,7 @@ step(void)
 			v = sub(0, rmode(a, s), 0, s);
 			rS = rS & ~FLAGX | ~rS << 2 & FLAGX | ~rS >> 2 & FLAGC;
 			wmode(a, s, v);
-			stime(a < 0, s);
+			stime(a.length == 2, s);
 			break;
 		case 6:
 			if(s == 3){ /* MOVE to SR */
@@ -873,7 +839,7 @@ step(void)
 			v = ~rmode(a, s);
 			nz(v, s);
 			wmode(a, s, v);
-			stime(a < 0, s);
+			stime(a.length == 2, s);
 			break;
 		case 8:
 			n = op & 7;
@@ -882,26 +848,26 @@ step(void)
 				a = amode(op >> 3, op, 0);
 				v = rmode(a, 0);
 				wmode(a, 0, subbcd(0, v));
-				if(a < 0)
+				if(a.length == 2)
 					tim += 8;
 				else
 					tim += 6;
 				break;
 			case 1:
 				if((op >> 3 & 7) != 0){
-					push32(amode(op >> 3, op, 0)); /* PEA */
+					push32(amode(op >> 3, op, 0)[0]); /* PEA */
 					tim += 8;
 				}else{
-					nz(r[n] = u32(r[n] >>> 16 | r[n] << 16), 2); /* SWAP */
+					nz(r[n] = r[n] >>> 16 | r[n] << 16, 2); /* SWAP */
 					tim += 4;
 				}
 				break;
 			case 2: /* EXT */
-				nz(r[n] = u32(r[n] & 0xffff0000 | u16(s8(r[n]))), 1);
+				nz(r[n] = r[n] & 0xffff0000 | (r[n] << 24 >> 24 & 0xffff), 1);
 				tim += 4;
 				break;
 			case 3: /* EXT */
-				nz(r[n] = s16(r[n]), 2);
+				nz(r[n] = r[n] << 16 >> 16, 2);
 				tim += 4;
 				break;
 			}
@@ -912,7 +878,7 @@ step(void)
 				v = rmode(a, 0);
 				nz(v, 0);
 				wmode(a, 0, v | 0x80);
-				tim += a < 0 ? 4 : 14;
+				tim += a.length == 2 ? 4 : 14;
 				break;
 			} /* TST */
 			a = amode(op >> 3, op, s);
@@ -927,11 +893,11 @@ step(void)
 				break;
 			}else if(v == 5){
 				if((op & 8) == 0){ /* LINK */
-					r[15] = u32(r[15] - 4);
+					r[15] = 0|r[15] - 4;
 					memwrite(r[15], r[8+n] >> 16, 0xffff);
 					memwrite(r[15] + 2, r[8+n], 0xffff);
 					r[8+n] = r[15];
-					r[15] = u32(r[15] + s16(fetch16()));
+					r[15] = 0|r[15] + (fetch16()<<16>>16);
 					tim += 16;
 				}else{ /* UNLK */
 					r[15] = r[8+n];
@@ -951,14 +917,14 @@ step(void)
 				break;
 			}
 			if((op & 0xc0) == 0xc0){ /* JMP */
-				pc = amode(op >> 3, op, 2);
+				pc = amode(op >> 3, op, 2)[0];
 				tim += 4;
 				break;
 			}
 			if((op & 0xc0) == 0x80){ /* JSR */
 				a = amode(op >> 3, op, 2);
 				push32(pc);
-				pc = a;
+				pc = a[0];
 				tim += 12;
 				break;
 			}
@@ -990,7 +956,7 @@ step(void)
 			case 0x4e75: pc = pop32(); tim += 16; break; /* RTS */
 			case 0x4e76: if((rS & FLAGV) != 0) trap(7, curpc); tim += 4; break; /* TRAPV */
 			case 0x4e77: /* RTR */
-				rS = u32(rS & 0xff00 | pop16() & 0x1f);
+				rS = rS & 0xff00 | pop16() & 0x1f;
 				pc = pop32();
 				tim += 20;
 				break;
@@ -1004,14 +970,14 @@ step(void)
 	case 5:
 		if((op & 0xf8) == 0xc8){ /* DBcc */
 			n = op & 7;
-			v = s16(fetch16());
+			v = fetch16()<<16>>16;
 			if(!cond((op >> 8) & 0xf)){
-				if(u16(r[n]) != 0){
-					r[n]--;
-					pc = u32(pc + v - 2);
+				if((r[n] & 0xffff) != 0){
+					r[n] = 0|r[n] - 1;
+					pc = 0|pc + v - 2;
 					tim += 10;
 				}else{
-					r[n] = u32(r[n] | 0xffff);
+					r[n] |= 0xffff;
 					tim += 14;
 				}
 			}else
@@ -1022,7 +988,7 @@ step(void)
 			a = amode(op >> 3, op, 0);
 			v = (int)cond(op >> 8 & 0xf);
 			wmode(a, 0, -v);
-			if(a < 0)
+			if(a.length == 2)
 				tim += 4 + 2 * v;
 			else
 				tim += 8;
@@ -1033,9 +999,9 @@ step(void)
 		if((op & 0x38) == 0x08){
 			tim += s == 2 || (op & 0x130) == 0x110 ? 8 : 4;
 			if((op & 0x100) == 0)
-				r[8+(op&7)] = u32(r[8+(op&7)]+n);
+				r[8+(op&7)] = 0|r[8+(op&7)]+n;
 			else
-				r[8+(op&7)] = u32(r[8+(op&7)]-n);
+				r[8+(op&7)] = 0|r[8+(op&7)]-n;
 			break;
 		}
 		rS |= FLAGZ;
@@ -1046,32 +1012,32 @@ step(void)
 		else
 			v = sub(v, n, 0, s);
 		rS = rS & ~FLAGX | rS << 4 & FLAGX;
-		if(a < 0)
+		if(a.length == 2)
 			tim += s == 2 || (op & 0x130) == 0x110 ? 8 : 4;
 		else
 			tim += s == 2 ? 12 : 8;
 		wmode(a, s, v);
 		break;
 	case 6: /* BRA */
-		v = s8(op);
+		v = op << 24 >> 24;
 		if(v == 0)
-			v = s16(fetch16());
+			v = fetch16() << 16 >> 16;
 		else if((0|v+1) == 0)
 			v = fetch32();
 		if((op & 0xf00) == 0x100){ /* BSR */
 			push32(pc);
-			pc = u32(curpc + 2 + v);
+			pc = 0|curpc + 2 + v;
 			tim += 18;
 			break;
 		}
 		if(cond((op >> 8) & 0xf)){
-			pc = u32(curpc + 2 + v);
+			pc = 0|curpc + 2 + v;
 			tim += 10;
 		}else
-			tim += u8(op + 1) <= 1 ? 12 : 8;
+			tim += op == 0 || op == 255 ? 12 : 8;
 		break;
 	case 7: /* MOVEQ */
-		r[n] = s8(op);
+		r[n] = op << 24 >> 24;
 		nz(r[n], 0);
 		tim += 4;
 		break;
@@ -1084,25 +1050,27 @@ step(void)
 				break;
 			}
 			if((op & 0x100) != 0){
-				w = (0|r[n]) % (0|s16(v));
+				w = (0|r[n]) % (v<<16>>16);
 				if((w^r[n]) < 0)
 					w = -w;
-				v = Math.trunc((0|r[n]) / (0|s16(v)));
-				if((0|v) != (0|s16(v))){
+				v = 0|Math.trunc((0|r[n]) / (v << 16 >> 16));
+				if(v != v<<16>>16){
 					rS = rS & ~FLAGC | FLAGV;
 					break;
 				}
 				tim += 158;
 			}else{
-				w = u32(r[n]) % u16(v);
-				v = Math.floor(u32(r[n]) / u16(v));
+				u = r[n];
+				if(u < 0) u += 4294967296;
+				w = u % (v & 0xffff);
+				v = Math.floor(u) / (v & 0xffff);
 				if(v >= 0x10000){
 					rS = rS & ~FLAGC | FLAGV;
 					break;
 				}
 				tim += 140;
 			}
-			r[n] = u32(u16(v) | u16(w) << 16);
+			r[n] = (v & 0xffff) | w << 16;
 			nz(v, 1);
 			break;
 		}
@@ -1117,7 +1085,7 @@ step(void)
 				wmode(a, 0, v);
 				tim += 18;
 			}else{
-				r[n] = u32(r[n] & 0xffffff00 | subbcd(r[n], r[m]));
+				r[n] = r[n] & 0xffffff00 | subbcd(r[n], r[m]);
 				tim += 6;
 			}
 			break;
@@ -1154,10 +1122,10 @@ step(void)
 			a = amode(op >> 3, op, 1);
 			v = rmode(a, 1);
 			if((op & 0x100) != 0)
-				v = (0|v) * (0|s16(r[n]));
+				v = (0|v) * (r[n]<<16>>16);
 			else
-				v = u16(v) * u16(r[n]);
-			r[n] = u32(v);
+				v = (v & 0xffff) * (r[n] & 0xffff);
+			r[n] = v;
 			nz(v, 2);
 			tim += 70;
 			break;
@@ -1173,7 +1141,7 @@ step(void)
 				wmode(a, 0, v);
 				tim += 18;
 			}else{
-				r[n] = u32(r[n] & 0xffffff00 | addbcd(r[n], r[m]));
+				r[n] = r[n] & 0xffffff00 | addbcd(r[n], r[m]);
 				tim += 6;
 			}
 			break;
@@ -1202,24 +1170,24 @@ step(void)
 			}
 			a = amode(op >> 3, op, s);
 			if((op >> 12) == 13)
-				r[8+n] = u32(r[8+n] + rmode(a, s));
+				r[8+n] = 0|r[8+n] + rmode(a, s);
 			else
-				r[8+n] = u32(r[8+n] - rmode(a, s));
+				r[8+n] = 0|r[8+n] - rmode(a, s);
 			break;
 		}
 		if((op & 0x130) == 0x100){ /* ADDX, SUBX */
 			m = op & 7;
 			if((op & 8) != 0){
-				r[8+n] = u32(r[8+n] - (n==7&&s==0?2:1<<s));
-				a = u32(r[8+n]);
+				r[8+n] = 0|r[8+n] - (n==7&&s==0?2:1<<s);
+				a = [r[8+n]];
 				v = rmode(a, s);
-				r[8+m] = u32(r[8+m] - (m==7&&s==0?2:1<<s));
-				w = rmode(r[8+m], s);
+				r[8+m] = 0|r[8+m] - (m==7&&s==0?2:1<<s);
+				w = rmode([r[8+m]], s);
 				tim += s == 2 ? 30 : 18;
 			}else{
 				v = r[n];
 				w = r[m];
-				a = -(n+1);
+				a = [0,n];
 				tim += s == 2 ? 8 : 4;
 			}
 			if((op >> 12) == 13)
@@ -1240,7 +1208,7 @@ step(void)
 			v = sub(b ? r[n] : v, b ? v : r[n], 0, s);
 		rS = rS & ~FLAGX | rS << 4 & FLAGX;
 		if(b)
-			a = ~n;
+			a = [0,n];
 		wmode(a, s, v);
 		dtime(op, s);
 		break;
@@ -1251,7 +1219,7 @@ step(void)
 			s = 1;
 			a = amode(op >> 3, op, s);
 		}else{
-			a = -(1+(op & 7));
+			a = [0,(op & 7)];
 			m = op >> 2 & 6 | op >> 8 & 1;
 			n = (op >> 9) & 7;
 			if((op & 0x20) != 0)

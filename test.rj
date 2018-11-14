@@ -632,6 +632,8 @@ run(var l[])
 		failmsg = (string)e;
 		fail=true;
 	}
+	pc = _u32(pc);
+	rS = _u32(rS);
 	fail = fail || pc !== pcend;
 	fail = fail || rS !== _rSend;
 	for(i = 0; i < 16; i++)

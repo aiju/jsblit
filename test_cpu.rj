@@ -579,7 +579,7 @@ format(var x[])
 void
 _skipbra(var disp)
 {
-	if(disp[1] > 0x8000 || disp[1] <= -0x8000)
+	if(disp[1] >= 0x8000 || disp[1] < -0x8000)
 			pc += 4;
 	else if(disp[1] == 0 || disp[1] == -1 || disp[1] < -0x80 || disp[1] >= 0x80)
 			pc += 2;
