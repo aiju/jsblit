@@ -6,6 +6,7 @@ var canvas, ctx, pic;
 var ws;
 
 int FREQ = 8000000;
+int BAUD = 40000;
 int VBLDIV = Math.floor(FREQ / 60);
 
 upx1 = 0;
@@ -62,8 +63,8 @@ frame(void)
 }
 
 string keys[string] = {
-	"Enter": "\r",
-	"Backspace": "\b",
+	"Enter": "\x0d",
+	"Backspace": "\x08",
 	"Escape": "\x1b",
 	"Delete": "\x7f",
 	"ArrowUp": "\xf1",

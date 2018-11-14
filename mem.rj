@@ -159,6 +159,7 @@ keycheck(void)
 	if(uartrxbuf < 0 && uartrxctr <= 0 && uartrxchan != ""){
 		uartrxbuf = uartrxchan.charCodeAt(0);
 		uartrxchan = uartrxchan.substr(1);
+		uartrxctr += FREQ * 11 / BAUD;
 	}
 	if(uarttxbuf >= 0){
 		telnettx(String.fromCharCode(uarttxbuf));
