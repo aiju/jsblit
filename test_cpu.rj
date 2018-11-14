@@ -546,6 +546,7 @@ format(var x[])
 	case "eori_ccr":
 	case "ext":
 	case "jmp":
+	case "jsr":
 	case "move_to_ccr":
 	case "move_from_sr":
 	case "nbcd":
@@ -717,6 +718,7 @@ _addrcheck(var x[])
 	case "move_from_sr":
 	case "move_to_ccr":
 	case "jmp":
+	case "jsr":
 		_amodecheck(x[1], x[2]);
 		break;
 	case "unlk":
@@ -946,6 +948,12 @@ simulate(var x[])
 		}
 	case "jmp":
 		a = _amode(s, x[2]);
+		pc = (int)a;
+		break;
+	case "jsr":
+		a = _amode(s, x[2]);
+		write("L", "R15", read("L", "R15", false) - 4);
+		write("L", (string)read("L", "R15", false), pc);
 		pc = (int)a;
 		break;
 	case "lea":
@@ -1280,6 +1288,7 @@ var encodetab[] = [
 	["exg", "L", ["A", "$0", "$"], ["A", "$1", "$"]], var(a,b) return [0xC148 | a<<9 | b],
 	["ext", "$0", ["D", "$1", "$"]], var(a,b) return [0x4800 | s0[a]+1<<6 | b],
 	["jmp", "W", "$0"], var(a) return [0x4EC0 | encamode(a, "c")].concat(amrest("W",a)),
+	["jsr", "W", "$0"], var(a) return [0x4E80 | encamode(a, "c")].concat(amrest("W",a)),
 	["lea", "L", "$0", ["A", "$1", "$"]], var(a,b) return [0x41C0 | b<<9 | encamode(a, "c")].concat(amrest("L",a)),
 	["link", "W", ["A", "$0", "$"], ["#imm", "$1"]], var(a,b) return [0x4E50 | a, b],
 	["lsl", "$0", ["D", "$1", "$"], ["D", "$2", "$"]], var(a, b, c) return [0xe128 | s0[a] << 6 | b << 9 | c],
@@ -1461,6 +1470,7 @@ test(void)
 		run(["divs", "W", amodes[k], Dn]);
 		run(["divu", "W", amodes[k], Dn]);
 		run(["jmp", "W", amodes[k]]);
+		run(["jsr", "W", amodes[k]]);
 		run(["lea", "L", amodes[k], An]);
 		run(["move_to_ccr", "W", amodes[k]]);
 		run(["move_from_sr", "W", amodes[k]]);
