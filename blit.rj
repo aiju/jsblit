@@ -14,6 +14,9 @@ upy1 = 0;
 upx2 = SX;
 upy2 = SY;
 
+int dark[] = [0,33,0];
+int bright[] = [0,240,0];
+
 void
 redraw(void)
 {
@@ -32,9 +35,9 @@ redraw(void)
 	for(j = upy1; j < upy2; j++)
 		for(i = upx1; i < upx2; i++){
 			p = (invert^ram[(daddr>>1) + (SX/16) * j + (i>>4)]) >> 15-(i%16) & 1;
-			d[(j * SX + i) * 4] = p * 255;
-			d[(j * SX + i) * 4 + 1] = p * 255;
-			d[(j * SX + i) * 4 + 2] = p * 255;
+			d[(j * SX + i) * 4] = p != 0 ? bright[0] : dark[0];
+			d[(j * SX + i) * 4 + 1] = p != 0 ? bright[1] : dark[1];
+			d[(j * SX + i) * 4 + 2] = p != 0 ? bright[2] : dark[2];
 			d[(j * SX + i) * 4 + 3] = 255;
 		}
 	ctx.putImageData(pic, 0, 0, upx1, upy1, upx2 - upx1, upy2 - upy1);
@@ -78,6 +81,7 @@ string keys[string] = {
 	"F12": "\xfe",
 	"PageDown": "\xb0",
 	"Insert": "\xe0",
+	"Tab": "\t",
 };
 
 bool
@@ -85,7 +89,10 @@ key(var e)
 {
 	var k, m, i;
 	
+	console.log(e);
 	k = e.key;
+	if(e.metaKey || e.shiftKey && e.ctrlKey)
+		return true;
 	if(k.length == 1){
 		i = k.charCodeAt(0);
 		if(e.ctrlKey && i >= 64 && i < 127)
