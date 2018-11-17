@@ -2,8 +2,10 @@ int vblctr = 0;
 int uartrxctr = 0;
 int SX = 800;
 int SY = 1024;
+bool usegl = false;
 var canvas, ctx, pic;
 var ws;
+string wsurl = "ws://localhost:8080/telnet";
 
 int FREQ = 8000000;
 int BAUD = 40000;
@@ -27,6 +29,11 @@ redraw(void)
 	upy1 = 0;
 	upx2 = SX;
 	upy2 = SY;
+	
+	if(usegl){
+		glrender();
+		return;
+	}
 	
 	if(upy1 >= upy2 || upx1 >= upx2)
 		return;
@@ -89,7 +96,6 @@ key(var e)
 {
 	var k, m, i;
 	
-	console.log(e);
 	k = e.key;
 	if(e.metaKey || e.shiftKey && e.ctrlKey)
 		return true;
@@ -146,12 +152,19 @@ mouseleave(var e)
 void
 main(void)
 {
-	ws = new WebSocket("ws://localhost:8080/telnet", "telnet");
+	ws = new WebSocket(wsurl, "telnet");
+	ws.onclose = void(var e) {
+		document.write("Websocket closed: code " + e.code + ", reason " + e.reason);
+	};
 	ws.onmessage = telnetrx;
 	ws.onopen = telnetinit;
 	canvas = document.getElementById("canv");
-	ctx = canvas.getContext("2d");
-	pic = ctx.createImageData(SX, SY);
+	if(usegl){
+		glinit();
+	}else{
+		ctx = canvas.getContext("2d");
+		pic = ctx.createImageData(SX, SY);
+	}
 	cpureset();
 	window.onkeydown = key;
 	canvas.onmousemove = mousemove;

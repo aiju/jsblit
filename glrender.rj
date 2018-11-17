@@ -1,0 +1,107 @@
+var gl, tex;
+int BORD = 5;
+
+var
+mkshader(var type, string source)
+{
+	var shader = gl.createShader(type);
+	gl.shaderSource(shader, source);
+	gl.compileShader(shader);
+	if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+		console.log(gl.getShaderInfoLog(shader));
+		gl.deleteShader(shader);
+		return null;
+	}
+	return shader;
+}
+
+var
+mkprogram(string vss, string fss)
+{
+	var vs = mkshader(gl.VERTEX_SHADER, vss);
+	var fs = mkshader(gl.FRAGMENT_SHADER, fss);
+	
+	var prog = gl.createProgram();
+	gl.attachShader(prog, vs);
+	gl.attachShader(prog, fs);
+	gl.linkProgram(prog);
+	
+	if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+		console.log(gl.getProgramInfo(prog));
+		gl.deleteProgram(prog);
+		return null;
+	}
+	return prog;
+}
+
+var
+mkbuffer(void)
+{
+	struct Float32Array;
+	var posbuf = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, posbuf);
+	var positions = [1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, -1.0];
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+	return posbuf;
+}
+
+var
+mktexture(void)
+{
+	struct Uint8Array;
+
+	var tex = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_2D, tex);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, SX+2*BORD, SY+2*BORD, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array((SX+2*BORD)*(SY+2*BORD)*4).fill(0));
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	return tex;
+}
+
+void
+glinit(void)
+{
+	var buf, shad, k;
+	
+	gl = canvas.getContext("webgl2");
+	shad = mkprogram(
+		"attribute vec4 pos; varying highp vec2 tc; void main() {" +
+		"tc = pos.xy; gl_Position = pos; }",
+		"uniform sampler2D tex; varying highp vec2 tc; void main() {" +
+		"highp vec2 p = vec2(tc.x * (1.0 + 0.025 * tc.y * tc.y) * 0.5 + 0.5, -tc.y * (1.0 + 0.025 * tc.x * tc.x) * 0.5 + 0.5); " +
+		"gl_FragColor = texture2D(tex, p); }");
+	buf = mkbuffer();
+	tex = mktexture();
+	gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+	k = gl.getAttribLocation(shad, "pos");
+	gl.vertexAttribPointer(k, 2, gl.FLOAT, false, 0, 0);
+	gl.enableVertexAttribArray(k);
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_2D, tex);
+	gl.useProgram(shad);
+	gl.uniform1i(gl.getUniformLocation(shad, "tex"), 0);
+	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+void
+glrender(void)
+{
+	struct Uint8Array;
+	var a;
+	int i, j;
+
+	a = new Uint8Array(SX*SY*4).fill(0);
+	for(j = 0; j < SY; j++)
+		for(i = 0; i < SX; i++){
+			a[4*(j*SX+i)+1] = ((invert^ram[(daddr>>1) + (SX/16) * j + (i>>4)]) >> 15-(i%16) & 1) * (240-32) + 32;
+			a[4*(j*SX+i)+3] = 255;
+		}
+	gl.bindTexture(gl.TEXTURE_2D, tex);
+	gl.texSubImage2D(gl.TEXTURE_2D, 0, BORD, BORD, SX, SY, gl.RGBA, gl.UNSIGNED_BYTE, a);
+	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+}

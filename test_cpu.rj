@@ -1506,3 +1506,13 @@ tests(void)
 	_table();
 	window.setTimeout(tests, 0);
 }
+
+void
+nodetests(void)
+{
+	run = node_run;
+	test();
+}
+
+if(typeof(window) == "undefined")
+	nodetests();
