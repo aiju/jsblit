@@ -5,7 +5,7 @@ int SY = 1024;
 bool usegl = false;
 var canvas, ctx, pic;
 var ws;
-string wsurl = "ws://" + (window.location.hostname || "localhost") + ":8080/telnet";
+string wsurl = "ws://" + (window.location.hostname || "localhost") + ":1982/telnet";
 
 int FREQ = 8000000;
 int BAUD = 40000;

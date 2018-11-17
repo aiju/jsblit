@@ -12,7 +12,7 @@ import (
 
 var target = flag.String("t", "localhost:567", "server to proxy to")
 
-var listen = flag.String("l", ":8080", "websocket server bind address")
+var listen = flag.String("l", ":1982", "websocket server bind address")
 
 func main() {
         flag.Parse()
