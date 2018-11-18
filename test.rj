@@ -686,22 +686,24 @@ node_run(var l[])
 	if(res.length == 0) return;
 	m = res[0];
 	enc = res[1];
-	console.log("begin '" + format(m) + "'");
-	console.log("set pc 0x" + X(_pcstart, 8));
-	console.log("set rS 0x" + X(_rSstart, 4));
+	string s = "";
+	s += "begin '" + format(m) + "'\n";
+	s += "set pc 0x" + X(_pcstart, 8)+"\n";
+	s += "set rS 0x" + X(_rSstart, 4)+"\n";
 	for(i = 0; i < 16; i++)
-		console.log("set r"+(string)i+" 0x" + X(rstart[i], 8));
+		s += "set r"+(string)i+" 0x" + X(rstart[i], 8)+"\n";
 	for(i in mem)
-		console.log("write 0x" + X((int)i, 8) + " 0x" + X(mem[i], 2));
-	console.log("step");
-	console.log("cmp pc 0x" + X(_pcend, 8));
-	console.log("cmp rS 0x" + X(_rSend, 4));
+		s += "write 0x" + X((int)i, 8) + " 0x" + X(mem[i], 2)+"\n";
+	s += "step\n";
+	s += "cmp pc 0x" + X(_pcend, 8)+"\n";
+	s += "cmp rS 0x" + X(_rSend, 4)+"\n";
 	for(i = 0; i < 16; i++)
-		console.log("cmp r"+(string)i+" 0x" + X(rval(i), 8));
+		s += "cmp r"+(string)i+" 0x" + X(rval(i), 8)+"\n";
 	for(i in mem)
-		console.log("read 0x" + X((int)i, 8) + " 0x" + X(memwr_exp[i] === undefined ? mem[i] : memwr_exp[i], 2));
-	console.log("end");
-	
+		s += "read 0x" + X((int)i, 8) + " 0x" + X(memwr_exp[i] === undefined ? mem[i] : memwr_exp[i], 2)+"\n";
+	s += "end\n";
+	extern var process;
+	process.stdout.write(s);
 }
 
 void run(var a[]) = browser_run;

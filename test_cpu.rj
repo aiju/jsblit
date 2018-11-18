@@ -650,7 +650,7 @@ _ind_amodecheck(var size, var x[])
 	switch(x[0]){
 	case "A":
 		if((rval(8+x[1]) & 1) != 0)
-			rstart[8+x[1]] ^= 1;
+			rstart[8+x[1]] = _u32(rstart[8+x[1]] ^ 1);
 		break;
 	default:
 		throw "_ind_amodecheck";
@@ -1175,7 +1175,7 @@ simulate(var x[])
 		break;
 	case "unlk":
 		a = _amode(s, x[2]);
-		mem_sug("L", read("L", a, false), random(32) & ~1);
+		mem_sug("L", read("L", a, false), _u32(random(32) & ~1));
 		write("L", "R15", read("L", a, false));
 		n = read("L", "R15", false);
 		write("L", "R15", read("L", "R15", false) + 4);
@@ -1472,9 +1472,17 @@ tests(void)
 void
 nodetests(void)
 {
+	int i;
+
 	run = node_run;
-	test();
+	for(i=0;i<10;i++)
+		test();
 }
 
-if(typeof(window) == "undefined")
+if(typeof(window) == "undefined"){
+	extern var process;
+
+	_state = (int)process.argv[2];
 	nodetests();
+	process.exit(0);
+}

@@ -839,7 +839,7 @@ op_neg(int op, int s)
 	a = amode(op >> 3, op, s);
 	rS |= FLAGZ;
 	v = sub(0, rmode(a, s), 0, s);
-	rS = rS & ~FLAGX | ~rS << 2 & FLAGX | ~rS >> 2 & FLAGC;
+	rS = rS & ~FLAGX | rS << 4 & FLAGX;
 	wmode(a, s, v);
 	stime(a.length == 2, s);
 }
