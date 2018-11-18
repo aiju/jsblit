@@ -763,6 +763,59 @@ _gota7(var x[])
 }
 
 void
+_1op(string s, var a[], int f(int))
+{
+	string ad;
+	int v;
+	
+	ad = _amode(s, a);
+	v = read(s, ad, true);
+	write(s, ad, f(v));
+}
+
+void
+_2op(string sa, var a[], string sb, var b[], int f(int, int))
+{
+	string src, dst;
+	int srcv, dstv;
+	
+	if(sa == "B" && a[0] == "A" || sb == "B" && b[0] == "A") throw "404";
+	src = _amode(sa, a);
+	srcv = read(sa, src, true);
+	dst = _amode(sb, b);
+	dstv = read(sb, dst, true);
+	write(sb, dst, f(dstv, srcv));
+}
+
+void
+_2op_u(string sa, var a[], string sb, var b[], int f(int, int))
+{
+	string src, dst;
+	int srcv, dstv;
+	
+	if(sa == "B" && a[0] == "A" || sb == "B" && b[0] == "A") throw "404";
+	src = _amode(sa, a);
+	srcv = read(sa, src, false);
+	dst = _amode(sb, b);
+	dstv = read(sb, dst, false);
+	write(sb, dst, f(dstv, srcv));
+}
+
+void
+_2op_ro(string sa, var a[], string sb, var b[], int f(int, int))
+{
+	string src, dst;
+	int srcv, dstv;
+	
+	if(sa == "B" && a[0] == "A" || sb == "B" && b[0] == "A") throw "404";
+	src = _amode(sa, a);
+	srcv = read(sa, src, true);
+	dst = _amode(sb, b);
+	dstv = read(sb, dst, true);
+	f(dstv, srcv);
+}
+
+void
 simulate(var x[])
 {
 	string a, b, s;
@@ -771,26 +824,15 @@ simulate(var x[])
 	s = x[1];
 	switch(x[0]){
 	case "abcd":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _abcd(read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], _abcd);
 		return;
 	case "add":
 	case "addi":
-		if(x[3][0] == "A" && s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _add(s, read(s, b, false), read(s, a, false), 0, true);
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _add(s, a, b, 0, true));
 		return;
 	case "adda":
 		if(s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode("L", x[3]);
-		m = read("L", b, false) + read(s, a, true);
-		write("L", b, m);
+		_2op(s, x[2], "L", x[3], int(int a, int b) return a+b);
 		return;
 	case "addq":
 		x[2][1] &= 7;
@@ -806,34 +848,21 @@ simulate(var x[])
 		}
 		return;
 	case "addx":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";	
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _add(s, read(s, b, false), read(s, a, false), (int)_x, false);
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _add(s, a, b, (int)_x, false));
 		return;
 	case "and":
 	case "andi":
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _nz(s, read(s, b, false) & read(s, a, false));
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _nz(s, a & b));
 		return;
 	case "andi_ccr":
 		_setccr(_getccr() & x[2][1]);
 		pc += 2;
 		return;
 	case "asl":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _asl(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op("B", x[2], s, x[3], int(int a, int b) return _asl(s, a, b));
 		return;
 	case "asr":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _asr(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op("B", x[2], s, x[3], int(int a, int b) return _asr(s, a, b));
 		return;
 	case "bcc":
 		if(_checkcc(x[1]))
@@ -854,13 +883,12 @@ simulate(var x[])
 			pc += 2;
 		return;
 	case "bchg":
-	case "btst":
 	case "bclr":
 	case "bset":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _bop(s, read(s, b, false), read(s, a, false), x[0]);
-		if(x[0] != "btst") write(s, b, m);
+		_2op("B", x[2], s, x[3], int(int a, int b) return _bop(s, a, b, x[0]));
+		return;
+	case "btst":
+		_2op_ro("B", x[2], s, x[3], int(int a, int b) return _bop(s, a, b, x[0]));
 		return;
 	case "bsr":
 		if(x[1][1] > 0x8000 || x[1][1] <= -0x8000)
@@ -881,41 +909,24 @@ simulate(var x[])
 		return;
 	case "cmp":
 	case "cmpi":
-		if(x[3][0] == "A" && s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		_sub(s, read(s, b, false), read(s, a, false), 0, false, true);
+		_2op_ro(s, x[2], s, x[3], int(int a, int b) return _sub(s, a, b, 0, false, true));
 		return;
 	case "cmpa":
 		if(s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode("L", x[3]);
-		_sub("L", read("L", b, false), read(s, a, true), 0, false, true);
+		_2op_ro(s, x[2], "L", x[3], int(int a, int b) return _sub("L", a, b, 0, false, true));
 		return;
 	case "cmpm":
-		if(x[2][1] == x[3][1]) throw "undef";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		_sub(s, read(s, b, false), read(s, a, false), 0, false, true);
+		_2op_ro(s, x[2], s, x[3], int(int a, int b) return _sub(s, a, b, 0, false, true));
 		return;
 	case "divs":
-		a = _amode("W", x[2]);
-		b = _amode("L", x[3]);
-		m = _divs(read("L", b, false), read("W", a, false));
-		write("L", b, m);
+		_2op("W", x[2], "L", x[3], _divs);
 		return;
 	case "divu":
-		a = _amode("W", x[2]);
-		b = _amode("L", x[3]);
-		m = _divu(read("L", b, false), read("W", a, false));
-		write("L", b, m);
+		_2op("W", x[2], "L", x[3], _divu);
 		return;
 	case "eor":
 	case "eori":
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _nz(s, read(s, b, false) ^ read(s, a, false));
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _nz(s, a ^ b));
 		return;
 	case "eori_ccr":
 		_setccr(_getccr() ^ x[2][1]);
@@ -964,38 +975,32 @@ simulate(var x[])
 	case "link":
 		a = _amode("L", x[2]);
 		b = _amode("W", x[3]);
+		n = read("L", a, false);
 		write("L", "R15", read("L", "R15", false) - 4);
-		write("L", (string)read("L", "R15", false), read("L", a, false));
+		write("L", (string)read("L", "R15", false), n);
 		write("L", a, read("L", "R15", false));
 		write("L", "R15", read("L", "R15", false) + read("W", b, true));
 		return;
 	case "lsl":
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _lsl(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _lsl(s, a, b));
 		return;
 	case "lsr":
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _lsr(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op_u(s, x[2], s, x[3], int(int a, int b) return _lsr(s, a, b));
 		return;
 	case "move":
+		if(x[2][0] == "A" && s == "B") throw "404";
 		if(x[3][0] == "A" && s == "B") throw "404";
-		if(x[2][0] == "A" && x[3][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";
-		if(x[2][0] == "A" && x[3][0] == "(A)+" && x[2][1] == x[3][1]) throw "undef";
 		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
 		m = read(s, a, false);
+		b = _amode(s, x[3]);
 		_nz(s, m);
 		write(s, b, m);
 		return;
 	case "movea":
 		if(s == "B") throw "404";
 		a = _amode(s, x[2]);
-		b = _amode("L", x[3]);
 		m = read(s, a, true);
+		b = _amode("L", x[3]);
 		write("L", b, m);
 		return;
 	case "move_to_ccr":
@@ -1063,75 +1068,54 @@ simulate(var x[])
 		break;
 	case "muls":
 		a = _amode("W", x[2]);
-		b = _amode("L", x[3]);
+		b = _amode("W", x[3]);
 		m = _nz("L", read("W", a, true) * read("W", b, true));
 		write("L", b, m);
 		break;
 	case "mulu":
 		a = _amode("W", x[2]);
-		b = _amode("L", x[3]);
+		b = _amode("W", x[3]);
 		m = _nz("L", read("W", a, false) * read("W", b, false));
 		write("L", b, m);
 		break;
 	case "nbcd":
-		a = _amode(s, x[2]);
-		m = _nbcd(read(s, a, false));
-		write(s, a, m);
+		_1op(s, x[2], _nbcd);
 		break;
 	case "neg":
-		a = _amode(s, x[2]);
-		write(s, a, _sub(s, 0, read(s, a, true), 0, true, true));
+		_1op(s, x[2], int(int a) return _sub(s, 0, a, 0, true, true));
 		break;
 	case "negx":
-		a = _amode(s, x[2]);
-		write(s, a, _sub(s, 0, read(s, a, true), (int)_x, true, false));
+		_1op(s, x[2], int(int a) return _sub(s, 0, a, (int)_x, true, false));
 		break;
 	case "nop":
 		break;
 	case "not":
-		a = _amode(s, x[2]);
-		write(s, a, _nz(s, ~read(s, a, true)));
+		_1op(s, x[2], int(int a) return _nz(s, ~a));
 		break;
 	case "or":
 	case "ori":
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _nz(s, read(s, b, false) | read(s, a, false));
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _nz(s, a | b));
 		return;
 	case "ori_ccr":
 		_setccr(_getccr() | x[2][1]);
 		pc += 2;
 		return;
 	case "pea":
-		if(_gota7(x[2])) throw "undef";
 		write("L", "R15", read("L", "R15", false) - 4);
 		a = _amode(s, x[2]);
 		write("L", (string)read("L", "R15", false), (int)a);
 		break;
 	case "rol":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _rol(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op_u("B", x[2], s, x[3], int(int a, int b) return _rol(s, a, b));
 		return;
 	case "ror":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _ror(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op_u("B", x[2], s, x[3], int(int a, int b) return _ror(s, a, b));
 		return;
 	case "roxl":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _roxl(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op_u("B", x[2], s, x[3], int(int a, int b) return _roxl(s, a, b));
 		return;
 	case "roxr":
-		a = _amode("B", x[2]);
-		b = _amode(s, x[3]);
-		m = _roxr(s, read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op_u("B", x[2], s, x[3], int(int a, int b) return _roxr(s, a, b));
 		return;
 	case "rtr":
 		m = rval(15);
@@ -1148,11 +1132,7 @@ simulate(var x[])
 		write("L", "R15", m + 4);
 		return;
 	case "sbcd":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _sbcd(read(s, b, false), read(s, a, false));
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], _sbcd);
 		return;
 	case "scc":
 		a = _amode(s, x[3]);
@@ -1160,18 +1140,11 @@ simulate(var x[])
 		return;
 	case "sub":
 	case "subi":
-		if(x[3][0] == "A" && s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _sub(s, read(s, b, false), read(s, a, false), 0, true, true);
-		write(s, b, m);
+		_2op(s, x[2], s, x[3], int(int a, int b) return _sub(s, a, b, 0, true, true));
 		return;
 	case "suba":
 		if(s == "B") throw "404";
-		a = _amode(s, x[2]);
-		b = _amode("L", x[3]);
-		m = read("L", b, false) - read(s, a, true);
-		write("L", b, m);
+		_2op(s, x[2], "L", x[3], int(int a, int b) return a - b);
 		return;
 	case "subq":
 		x[2][1] &= 7;
@@ -1186,25 +1159,14 @@ simulate(var x[])
 			write(s, b, m);
 		}
 		return;
-	case "subx":
-		if(x[2][0] == "-(A)" && x[2][1] == x[3][1]) throw "undef";	
-		a = _amode(s, x[2]);
-		b = _amode(s, x[3]);
-		m = _sub(s, read(s, b, false), read(s, a, false), (int)_x, true, false);
-		write(s, b, m);
+	case "subx":	
+		_2op(s, x[2], s, x[3], int(int a, int b) return _sub(s, a, b, (int)_x, true, false));
 		return;
 	case "swap":
-		a = _amode("L", x[2]);
-		m = read("L", a, false);
-		m = m >>> 16 | m << 16;
-		_nz("L", m);
-		write("L", a, m);
+		_1op("L", x[2], int(int a) return _nz("L", a>>>16|a<<16));
 		break;
 	case "tas":
-		a = _amode(s, x[2]);
-		m = read(s, a, false);
-		_nz(s, m);
-		write(s, a, m | 0x80);
+		_1op(s, x[2], int(int a) return _nz(s, a) | 0x80);
 		break;
 	case "tst":
 		a = _amode(s, x[2]);
@@ -1212,12 +1174,12 @@ simulate(var x[])
 		_nz(s, m);
 		break;
 	case "unlk":
-		if(_gota7(x[2])) throw "undef";
 		a = _amode(s, x[2]);
 		mem_sug("L", read("L", a, false), random(32) & ~1);
 		write("L", "R15", read("L", a, false));
-		write("L", a, read("L", (string)read("L", "R15", false), false));
+		n = read("L", "R15", false);
 		write("L", "R15", read("L", "R15", false) + 4);
+		write("L", a, read("L", (string)n, false));
 		return;
 	default:
 		throw "dunno how to simulate " + (string)x;

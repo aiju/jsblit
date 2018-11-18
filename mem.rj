@@ -14,6 +14,7 @@ irql[5] = INTUART;
 int ram[];
 int rom[];
 int mousex, mousey, mousebut;
+bool mousex0 = true, mousey0 = true;
 int keybuf, uartrxbuf, uarttxbuf;
 int kbdctrl, uartctrl;
 int daddr, dstat;
@@ -61,8 +62,16 @@ memread(int a)
 		return rom[a - 0x40000 >> 1];
 	switch(a & ~1){
 	case 01400000:
+		if(mousey0){
+			mousey0 = false;
+			return 0;
+		}
 		return mousey;
 	case 01400002:
+		if(mousex0){
+			mousex0 = false;
+			return 0;
+		}
 		return mousex;
 	case 01400010: /* uart status */
 		rc = 0;

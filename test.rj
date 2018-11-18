@@ -580,7 +580,6 @@ prep(var l[])[]
 			simulate(m);
 		}catch(e){
 			if(e === "404") return [];
-			if(e === "undef") return [];
 			if(e === "reroll") continue;
 			throw e;
 		}

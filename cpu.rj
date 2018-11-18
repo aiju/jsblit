@@ -890,7 +890,8 @@ op_nbcd(int op)
 void
 op_pea(int op)
 {
-	push32(amode(op >> 3, op, 0)[0]);
+	r[15] = 0|r[15] - 4;
+	wmode([r[15]], 2, amode(op >> 3, op, 0)[0]);
 	tim += 8;
 }
 
@@ -946,9 +947,12 @@ op_trap(int op)
 void
 op_link(int n)
 {
+	int v;
+	
+	v = r[8+n];
 	r[15] = 0|r[15] - 4;
-	memwrite(r[15], r[8+n] >> 16, 0xffff);
-	memwrite(r[15] + 2, r[8+n], 0xffff);
+	memwrite(r[15], v >> 16, 0xffff);
+	memwrite(r[15] + 2, v, 0xffff);
 	r[8+n] = r[15];
 	r[15] = 0|r[15] + (fetch16()<<16>>16);
 	tim += 16;
@@ -1196,16 +1200,16 @@ op_divu_divs(int op, int n)
 void
 op_sbcd(int op)
 {
-	int n, m, a[], v, w;
+	int n, m, src[], dst[], v, w;
 
 	n = (op >> 9) & 7;
 	m = op & 7;
 	if((op & 8) != 0){
-		a = amode(4, n, 0);
-		v = rmode(a, 0);
-		w = rmode(amode(4, m, 0), 0);
-		v = subbcd(v, w);
-		wmode(a, 0, v);
+		src = amode(4, m, 0);
+		dst = amode(4, n, 0);
+		v = rmode(src, 0);
+		w = rmode(dst, 0);
+		wmode(dst, 0, subbcd(w, v));
 		tim += 18;
 	}else{
 		r[n] = r[n] & 0xffffff00 | subbcd(r[n], r[m]);
@@ -1228,11 +1232,15 @@ op_cmpa(int op, int n)
 void
 op_cmpm(int op, int s, int n)
 {
-	int m;
+	int m, src[], dst[], v, w;
 
 	m = op & 7;
 	rS |= FLAGZ;
-	sub(rmode(amode(3, n, s), s), rmode(amode(3, m, s), s), 0, s);
+	src = amode(3, m, s);
+	dst = amode(3, n, s);
+	w = rmode(src, s);
+	v = rmode(dst, s);
+	sub(v, w, 0, s);
 	tim += s == 2 ? 20 : 12;
 }
 
@@ -1266,16 +1274,16 @@ op_mulu_muls(int op, int n)
 void
 op_abcd(int op)
 {
-	int n, m, a[], v, w;
+	int n, m, src[], dst[], v, w;
 
 	n = (op >> 9) & 7;
 	m = op & 7;
 	if((op & 8) != 0){
-		a = amode(4, n, 0);
-		v = rmode(a, 0);
-		w = rmode(amode(4, m, 0), 0);
-		v = addbcd(v, w);
-		wmode(a, 0, v);
+		src = amode(4, m, 0);
+		dst = amode(4, n, 0);
+		v = rmode(src, 0);
+		w = rmode(dst, 0);
+		wmode(dst, 0, addbcd(v, w));
 		tim += 18;
 	}else{
 		r[n] = r[n] & 0xffffff00 | addbcd(r[n], r[m]);
@@ -1319,27 +1327,26 @@ op_adda_suba(int op, int n)
 void
 op_addx_subx(int op, int s, int n)
 {
-	int m, a[], v, w;
+	int m, src[], dst[], v, w;
 
 	m = op & 7;
 	if((op & 8) != 0){
-		r[8+n] = 0|r[8+n] - (n==7&&s==0?2:1<<s);
-		a = [r[8+n]];
-		v = rmode(a, s);
-		r[8+m] = 0|r[8+m] - (m==7&&s==0?2:1<<s);
-		w = rmode([r[8+m]], s);
-		tim += s == 2 ? 30 : 18;
+		src = amode(4, m, s);
+		dst = amode(4, n, s);
+		w = rmode(src, s);
+		v = rmode(dst, s);
+		tim += s == 2 ? 10 : 6;
 	}else{
 		v = r[n];
 		w = r[m];
-		a = [0,n];
+		dst = [0,n];
 		tim += s == 2 ? 8 : 4;
 	}
 	if((op >> 12) == 13)
 		v = add(v, w, (rS & FLAGX) >> 4, s);
 	else
 		v = sub(v, w, (rS & FLAGX) >> 4, s);
-	wmode(a, s, v);
+	wmode(dst, s, v);
 	rS = rS & ~FLAGX | rS << 4 & FLAGX;
 }
 
