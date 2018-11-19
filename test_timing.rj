@@ -1,0 +1,347 @@
+var _aD = ["D", "$", "$"];
+var _aA = ["A", "$", "$"];
+var _aAi = ["(A)", "$", "$"];
+var _aAp = ["(A)+", "$", "$"];
+var _aAm = ["-(A)", "$", "$"];
+var _adA = ["(d16,A)", "$", "$", "$"];
+var _adAX = ["(d8,A,X.W)|(d8,A,X.L)", "$", "$", "$", "$"];
+var _axxxW = ["(xxx).W", "$", "$"];
+var _axxxL = ["(xxx).L", "$", "$"];
+var _adPC = ["(d16,PC)", "$", "$"];
+var _adPCX = ["(d8,PC,X.W)|(d8,PC,X.L)", "$", "$", "$"];
+var _aimm = ["#imm", "$"];
+
+string _movebw_col[] = [_aD, _aA, _aAi, _aAp, _aAm, _adA, _adAX, _axxxW, _axxxL];
+string _movebw_row[] = [_aD, _aA, _aAi, _aAp, _aAm, _adA, _adAX, _axxxW, _axxxL, _adPC, _adPCX, _aimm];
+
+int _movebw[][] = [
+	[4, 4, 8, 8, 8, 12, 14, 12, 16], 
+	[4, 4, 8, 8, 8, 12, 14, 12, 16], 
+	[8, 8, 12, 12, 12, 16, 18, 16, 20], 
+	[8, 8, 12, 12, 12, 16, 18, 16, 20], 
+	[10, 10, 14, 14, 14, 18, 20, 18, 22], 
+	[12, 12, 16, 16, 16, 20, 22, 20, 24], 
+	[14, 14, 18, 18, 18, 22, 24, 22, 26], 
+	[12, 12, 16, 16, 16, 20, 22, 20, 24], 
+	[16, 16, 20, 20, 20, 24, 26, 24, 28], 
+	[12, 12, 16, 16, 16, 20, 22, 20, 24], 
+	[14, 14, 18, 18, 18, 22, 24, 22, 26], 
+	[8, 8, 12, 12, 12, 16, 18, 16, 20]
+];
+
+int _movel[][] = [
+	[4, 4, 12, 12, 12, 16, 18, 16, 20],
+	[4, 4, 12, 12, 12, 16, 18, 16, 20],
+	[12, 12, 20, 20, 20, 24, 26, 24, 28],
+	[12, 12, 20, 20, 20, 24, 26, 24, 28],
+	[14, 14, 22, 22, 22, 26, 28, 26, 30],
+	[16, 16, 24, 24, 24, 28, 30, 28, 32],
+	[18, 18, 26, 26, 26, 30, 32, 30, 34],
+	[16, 16, 24, 24, 24, 28, 30, 28, 32],
+	[20, 20, 28, 28, 28, 32, 34, 32, 36],
+	[16, 16, 24, 24, 24, 28, 30, 28, 32],
+	[18, 18, 26, 26, 26, 30, 32, 30, 34],
+	[12, 12, 20, 20, 20, 24, 26, 24, 28]
+];
+
+var
+_mktab(string col[], string row[], int tab[][], var f(string a, string b, int v)[])[]
+{
+	int i, j;
+	var r[];
+	
+	r = [];
+	for(i = 0; i < row.length; i++)
+		for(j = 0; j < col.length; j++)
+			r = r.concat(f(row[i], col[j], tab[i][j]));
+	return r;
+}
+
+int
+_etime(string s, var a[])
+{
+	bool l;
+	
+	l = s == "L";
+	switch(a[0]){
+	case "D":
+	case "A":
+		return 0;
+	case "(A)":
+	case "(A)+":
+		return l ? 8 : 4;
+	case "-(A)":
+		return l ? 10 : 6;
+	case "(d16,A)":
+		return l ? 12 : 8;
+	case "(d8,A,X.W)":
+	case "(d8,A,X.L)":
+		return l ? 14 : 10;
+	case "(xxx).W":
+		return l ? 12 : 8;
+	case "(xxx).L":
+		return l ? 16 : 12;
+	case "(d16,PC)":
+		return l ? 12 : 8;
+	case "(d8,PC,X.W)":
+	case "(d8,PC,X.L)":
+		return l ? 14 : 10;
+	case "#imm":
+		return l ? 8 : 4;
+	default:
+		throw "_etime";
+	}
+}
+
+int
+_fetime(string s, var a[])
+{
+	int n;
+	
+	n = _etime(s, a);
+	switch(a[0]){
+	case "D":
+	case "A":
+	case "#imm":
+		n += 2;
+	}
+	return n;
+}
+
+int
+_ltime(string s, int a)
+{
+	int n, i;
+
+	n = 0;
+	for(i = 0; i < 16; i++)
+		n += a>>i & 1;
+	return (s == "L" ? 8 : 4) * n;
+}
+
+var
+_timingtab[] = [
+	["add", "B", "$0", _aD], int(a) return 4 + _etime("B", a),
+	["add", "B", _aD, "$0"], int(a) return 8 + _etime("B", a),
+	["adda", "W", "$0", _aA], int(a) return 8 + _etime("W", a),
+	["add", "W", "$0", _aD], int(a) return 4 + _etime("W", a),
+	["add", "W", _aD, "$0"], int(a) return 8 + _etime("W", a),
+	["adda", "L", "$0", _aA], int(a) return 6 + _fetime("L", a),
+	["add", "L", "$0", _aD], int(a) return 6 + _fetime("L", a),
+	["add", "L", _aD, "$0"], int(a) return 12 + _etime("L", a),
+	["and", "B", "$0", _aD], int(a) return 4 + _etime("B", a),
+	["and", "B", _aD, "$0"], int(a) return 8 + _etime("B", a),
+	["and", "W", "$0", _aD], int(a) return 4 + _etime("W", a),
+	["and", "W", _aD, "$0"], int(a) return 8 + _etime("W", a),
+	["and", "L", "$0", _aD], int(a) return 6 + _fetime("L", a),
+	["and", "L", _aD, "$0"], int(a) return 12 + _etime("L", a),
+	["cmp", "B", "$0", _aD], int(a) return 4 + _etime("B", a),
+	["cmp", "W", "$0", _aD], int(a) return 4 + _etime("W", a),
+	["cmp", "L", "$0", _aD], int(a) return 6 + _etime("L", a),
+	["cmpa", "W", "$0", _aA], int(a) return 6 + _etime("W", a),
+	["cmpa", "L", "$0", _aA], int(a) return 6 + _etime("L", a),
+	["divs", "$", "$0", _aD], int(a) return 158 + _etime("W", a),
+	["divu", "$", "$0", _aD], int(a) return 140 + _etime("W", a),
+	["eor", "B", _aD, _aD], int(a) return 4,
+	["eor", "B", _aD, "$0"], int(a) return 8 + _etime("B", a),
+	["eor", "W", _aD, _aD], int(a) return 4,
+	["eor", "W", _aD, "$0"], int(a) return 8 + _etime("W", a),
+	["eor", "L", _aD, _aD], int(a) return 8,
+	["eor", "L", _aD, "$0"], int(a) return 12 + _etime("L", a),
+	["muls", "$", "$0", _aD], int(a) return 70 + _etime("W", a),
+	["mulu", "$", "$0", _aD], int(a) return 70 + _etime("W", a),
+	["or", "B", "$0", _aD], int(a) return 4 + _etime("B", a),
+	["or", "B", _aD, "$0"], int(a) return 8 + _etime("W", a),
+	["or", "W", "$0", _aD], int(a) return 4 + _etime("B", a),
+	["or", "W", _aD, "$0"], int(a) return 8 + _etime("W", a),
+	["or", "L", "$0", _aD], int(a) return 6 + _fetime("L", a),
+	["or", "L", _aD, "$0"], int(a) return 12 + _etime("L", a),
+	["sub", "B", "$0", _aD], int(a) return 4 + _etime("B", a),
+	["sub", "B", _aD, "$0"], int(a) return 8 + _etime("B", a),
+	["suba", "W", "$0", _aA], int(a) return 8 + _etime("W", a),
+	["sub", "W", "$0", _aD], int(a) return 4 + _etime("W", a),
+	["sub", "W", _aD, "$0"], int(a) return 8 + _etime("W", a),
+	["suba", "L", "$0", _aA], int(a) return 6 + _fetime("L", a),
+	["sub", "L", "$0", _aD], int(a) return 6 + _fetime("L", a),
+	["sub", "L", _aD, "$0"], int(a) return 12 + _etime("L", a),
+
+	["addi|andi|eori|ori|subi", "B|W", _aimm, _aD], int() return 8,
+	["addi|andi|eori|ori|subi", "L", _aimm, _aD], int() return 16,
+	["addi|andi|eori|ori|subi", "B", _aimm, "$0"], int(a) return 12 + _etime("B", a),
+	["addi|andi|eori|ori|subi", "W", _aimm, "$0"], int(a) return 12 + _etime("W", a),
+	["addi|andi|eori|ori|subi", "L", _aimm, "$0"], int(a) return 20 + _etime("L", a),
+	["addq", "B|W", "$", _aD], int() return 4,
+	["addq", "L", "$", _aD], int() return 8,
+	["addq", "B|W", "$", _aA], int() return 4,
+	["addq", "L", "$", _aA], int() return 8,
+	["addq", "B", "$", "$0"], int(a) return 8 + _etime("B", a),
+	["addq", "W", "$", "$0"], int(a) return 8 + _etime("W", a),
+	["addq", "L", "$", "$0"], int(a) return 12 + _etime("L", a),
+	["cmpi", "B|W", _aimm, _aD], int() return 8,
+	["cmpi", "L", _aimm, _aD], int() return 14,
+	["cmpi", "B", _aimm, "$0"], int(a) return 8 + _etime("B", a),
+	["cmpi", "W", _aimm, "$0"], int(a) return 8 + _etime("W", a),
+	["cmpi", "L", _aimm, "$0"], int(a) return 12 + _etime("L", a),
+	["moveq", "L", "$", _aD], int() return 4,
+	["subq", "B|W", "$", _aD], int() return 4,
+	["subq", "L", "$", _aD], int() return 8,
+	["subq", "B|W|L", "$", _aA], int() return 8,
+	["subq", "B", "$", "$0"], int(a) return 8 + _etime("B", a),
+	["subq", "W", "$", "$0"], int(a) return 8 + _etime("W", a),
+	["subq", "L", "$", "$0"], int(a) return 12 + _etime("L", a),
+
+	["clr|neg|negx|not", "B|W", _aD], int() return 4,
+	["clr|neg|negx|not", "L", _aD], int() return 6,
+	["clr|neg|negx|not", "B", "$0"], int(a) return 8 + _etime("B", a),
+	["clr|neg|negx|not", "W", "$0"], int(a) return 8 + _etime("W", a),
+	["clr|neg|negx|not", "L", "$0"], int(a) return 12 + _etime("L", a),
+	["scc", "B", "$", _aD], int(a) return 4, /* adjusted in simulate() */
+	["scc", "B", "$", "$0"], int(a) return 8 + _etime("B", a),
+	["nbcd", "B", _aD], int() return 6,
+	["nbcd", "B", "$0"], int(a) return 8 + _etime("B", a),
+	["tas", "B", _aD], int() return 4,
+	["tas", "B", "$0"], int(a) return 14 + _etime("B", a),
+	["tst", "B|W|L", _aD], int() return 4,
+	["tst", "$0", "$1"], int(a,b) return 4 + _etime(a,b),
+	
+	["asl|asr|lsl|lsr|rol|ror|roxl|roxr", "B|W", ["D", "$", "$0"], _aD], int(a) return 6 + 2 * (a & 63),
+	["asl|asr|lsl|lsr|rol|ror|roxl|roxr", "B|W", ["#imm8", "$0"], _aD], int(a) return 6 + 2 * (a & 63),
+	["asl|asr|lsl|lsr|rol|ror|roxl|roxr", "L", ["D", "$", "$0"], _aD], int(a) return 8 + 2 * (a & 63),
+	["asl|asr|lsl|lsr|rol|ror|roxl|roxr", "L", ["#imm8", "$0"], _aD], int(a) return 8 + 2 * (a & 63),
+	["asl|asr|lsl|lsr|rol|ror|roxl|roxr", "W", ["#imm8", 1], "$0"], int(a) return 8 + _etime("W", a),
+
+	["bchg", "B", _aD, "$0"], int(var a) return 8 + _etime("B", a),
+	["bchg", "B", _aimm, "$0"], int(var a) return 12 + _etime("B", a),
+	["bchg", "L", _aD, _aD], int(var a) return 8,
+	["bchg", "L", _aimm, _aD], int(var a) return 12,
+	["bclr", "B", _aD, "$0"], int(var a) return 8 + _etime("B", a),
+	["bclr", "B", _aimm, "$0"], int(var a) return 12 + _etime("B", a),
+	["bclr", "L", _aD, _aD], int(var a) return 10,
+	["bclr", "L", _aimm, _aD], int(var a) return 14,
+	["bset", "B", _aD, "$0"], int(var a) return 8 + _etime("B", a),
+	["bset", "B", _aimm, "$0"], int(var a) return 12 + _etime("B", a),
+	["bset", "L", _aD, _aD], int(var a) return 8,
+	["bset", "L", _aimm, _aD], int(var a) return 12,
+	["btst", "B", _aD, "$0"], int(var a) return 4 + _etime("B", a),
+	["btst", "B", _aimm, "$0"], int(var a) return 8 + _etime("B", a),
+	["btst", "L", _aD, _aD], int(var a) return 6,
+	["btst", "L", _aimm, _aD], int(var a) return 10,
+	
+	/* bcc calculated in simulate() */
+	["bsr", "$"], int() return 18,
+	
+	["jmp", "W", _aAi], int() return 8,
+	["jmp", "W", _adA], int() return 10,
+	["jmp", "W", _adAX], int() return 14,
+	["jmp", "W", _axxxW], int() return 10,
+	["jmp", "W", _axxxL], int() return 12,
+	["jmp", "W", _adPC], int() return 10,
+	["jmp", "W", _adPCX], int() return 14,
+	["jsr", "W", _aAi], int() return 16,
+	["jsr", "W", _adA], int() return 18,
+	["jsr", "W", _adAX], int() return 22,
+	["jsr", "W", _axxxW], int() return 18,
+	["jsr", "W", _axxxL], int() return 20,
+	["jsr", "W", _adPC], int() return 18,
+	["jsr", "W", _adPCX], int() return 22,
+	["lea", "L", _aAi, _aA], int() return 4,
+	["lea", "L", _adA, _aA], int() return 8,
+	["lea", "L", _adAX, _aA], int() return 12,
+	["lea", "L", _axxxW, _aA], int() return 8,
+	["lea", "L", _axxxL, _aA], int() return 12,
+	["lea", "L", _adPC, _aA], int() return 8,
+	["lea", "L", _adPCX, _aA], int() return 12,
+	["pea", "L", _aAi], int() return 12,
+	["pea", "L", _adA], int() return 16,
+	["pea", "L", _adAX], int() return 20,
+	["pea", "L", _axxxW], int() return 16,
+	["pea", "L", _axxxL], int() return 20,
+	["pea", "L", _adPC], int() return 16,
+	["pea", "L", _adPCX], int() return 20,
+	["movem", "W", _aAi, ["list", "$0"]], int(var a) return 12+_ltime("W", a),
+	["movem", "W", _aAp, ["list", "$0"]], int(var a) return 12+_ltime("W", a),
+	["movem", "W", _adA, ["list", "$0"]], int(var a) return 16+_ltime("W", a),
+	["movem", "W", _adAX, ["list", "$0"]], int(var a) return 18+_ltime("W", a),
+	["movem", "W", _axxxW, ["list", "$0"]], int(var a) return 16+_ltime("W", a),
+	["movem", "W", _axxxL, ["list", "$0"]], int(var a) return 20+_ltime("W", a),
+	["movem", "W", _adPC, ["list", "$0"]], int(var a) return 16+_ltime("W", a),
+	["movem", "W", _adPCX, ["list", "$0"]], int(var a) return 18+_ltime("W", a),
+	["movem", "L", _aAi, ["list", "$0"]], int(var a) return 12+_ltime("L", a),
+	["movem", "L", _aAp, ["list", "$0"]], int(var a) return 12+_ltime("L", a),
+	["movem", "L", _adA, ["list", "$0"]], int(var a) return 16+_ltime("L", a),
+	["movem", "L", _adAX, ["list", "$0"]], int(var a) return 18+_ltime("L", a),
+	["movem", "L", _axxxW, ["list", "$0"]], int(var a) return 16+_ltime("L", a),
+	["movem", "L", _axxxL, ["list", "$0"]], int(var a) return 20+_ltime("L", a),
+	["movem", "L", _adPC, ["list", "$0"]], int(var a) return 16+_ltime("L", a),
+	["movem", "L", _adPCX, ["list", "$0"]], int(var a) return 18+_ltime("L", a),
+	["movem", "W", ["list", "$0"], _aAi], int(var a) return 8+_ltime("W", a),
+	["movem", "W", ["list", "$0"], _aAm], int(var a) return 8+_ltime("W", a),
+	["movem", "W", ["list", "$0"], _adA], int(var a) return 12+_ltime("W", a),
+	["movem", "W", ["list", "$0"], _adAX], int(var a) return 14+_ltime("W", a),
+	["movem", "W", ["list", "$0"], _axxxW], int(var a) return 12+_ltime("W", a),
+	["movem", "W", ["list", "$0"], _axxxL], int(var a) return 16+_ltime("W", a),
+	["movem", "L", ["list", "$0"], _aAi], int(var a) return 8+_ltime("L", a),
+	["movem", "L", ["list", "$0"], _aAm], int(var a) return 8+_ltime("L", a),
+	["movem", "L", ["list", "$0"], _adA], int(var a) return 12+_ltime("L", a),
+	["movem", "L", ["list", "$0"], _adAX], int(var a) return 14+_ltime("L", a),
+	["movem", "L", ["list", "$0"], _axxxW], int(var a) return 12+_ltime("L", a),
+	["movem", "L", ["list", "$0"], _axxxL], int(var a) return 16+_ltime("L", a),
+
+	["addx", "B", _aD, _aD], int() return 4,
+	["addx", "W", _aD, _aD], int() return 4,
+	["addx", "L", _aD, _aD], int() return 8,
+	["addx", "B", _aAm, _aAm], int() return 18,
+	["addx", "W", _aAm, _aAm], int() return 18,
+	["addx", "L", _aAm, _aAm], int() return 30,
+	["cmpm", "B", _aAp, _aAp], int() return 12,
+	["cmpm", "W", _aAp, _aAp], int() return 12,
+	["cmpm", "L", _aAp, _aAp], int() return 20,
+	["subx", "B", _aD, _aD], int() return 4,
+	["subx", "W", _aD, _aD], int() return 4,
+	["subx", "L", _aD, _aD], int() return 8,
+	["subx", "B", _aAm, _aAm], int() return 18,
+	["subx", "W", _aAm, _aAm], int() return 18,
+	["subx", "L", _aAm, _aAm], int() return 30,
+	["abcd", "B", _aD, _aD], int() return 6,
+	["abcd", "B", _aAm, _aAm], int() return 18,
+	["sbcd", "B", _aD, _aD], int() return 6,
+	["sbcd", "B", _aAm, _aAm], int() return 18,
+	
+	["movep", "W", "$", "$"], int() return 16,
+	["movep", "L", "$", "$"], int() return 24,
+
+	["andi_ccr", "B", _aimm] , int() return 20,
+	["eori_ccr", "B", _aimm], int() return 20,
+	["ori_ccr", "B", _aimm], int() return 20,
+	["move_from_sr", "W", _aD], int() return 6,
+	["move_from_sr", "W", "$0"], int(a) return 8 + _etime("W", a),
+	["move_to_ccr", "W", "$0"], int(a) return 12 + _etime("W", a),
+	["exg", "L", "$", "$"], int() return 6,
+	["ext", "$", "$"], int() return 4,
+	["link", "W", "$", "$"], int() return 16,
+	["nop"], int() return 4,
+	["reset"], int() return 132,
+	["rte"], int() return 20,
+	["rtr"], int() return 20,
+	["rts"], int() return 16,
+	["stop"], int() return 4,
+	["swap", "$", "$"], int() return 4,
+	["unlk", "L", "$"], int() return 12,
+].concat(_mktab(_movebw_col, _movebw_row, _movebw, var(string a, string b, int v)[] return [[b[0]=="A"?"movea":"move", "B|W", a, b], int() return v]))
+.concat(_mktab(_movebw_col, _movebw_row, _movel, var(string a, string b, int v)[] return [[b[0]=="A"?"movea":"move", "L", a, b], int() return v]));
+
+int
+_calctime(var op[])
+{
+	int i;
+	var l[];
+	
+	for(i = 0; i < _timingtab.length; i += 2){
+		l = new Array;
+		if(match(_timingtab[i], op, l)){
+			return _timingtab[i+1].apply(undefined, l);
+		}
+	}
+	return 0;
+	throw "no match for " + (string)op;
+}

@@ -136,7 +136,7 @@ amode(int m, int n, int s)[]
 			v = fetch16();
 			return [0|pc + (v<<16>>16) - 2];
 		case 3:
-			tim += s == 2 ? 14 : 4;
+			tim += s == 2 ? 14 : 10;
 			w = fetch16();
 			v = r[w >> 12];
 			if((w & 1<<11) == 0)
@@ -445,7 +445,7 @@ subbcd(int a, int b)
 void
 dtime(int op, int s)
 {
-	if((op & 0x100) != 0){
+	if((op & 0x100) == 0){
 		if(s == 2)
 			if((op & 0x30) == 0 || (op & 0x3f) == 0x3c)
 				tim += 8;
@@ -645,20 +645,24 @@ op_movep(int op, int s, int n)
 }
 
 void
-bitops(int op, int s, int n)
+bitop(int op, int s, int n)
 {
 	int v, w, a[];
 
 	if((op & 0x100) != 0)
 		w = r[n];
-	else
+	else{
 		w = fetch16();
+		tim += 4;
+	}
 	if((op & 0x38) != 0){
 		n = 0;
 		w = 1<<(w & 7);
 	}else{
 		n = 2;
 		w = 1<<(w & 31);
+		if(s == 0 || s == 2)
+			tim += 2;
 	}
 	a = amode(op >> 3, op, n);
 	v = rmode(a, n);
@@ -667,17 +671,14 @@ bitops(int op, int s, int n)
 		rS |= FLAGZ;
 	switch(s){
 	case 1: v ^= w; break;
-	case 2: v &= ~w; if(n == 2) tim += 2; break;
+	case 2: v &= ~w; break;
 	case 3: v |= w; break;
 	}
 	if(s != 0){
 		wmode(a, n, v);
-		tim += (op & 0x100) != 0 ? 8 : 12;
-	}else{
-		tim += (op & 0x100) != 0 ? 4 : 8;
-		if(n == 2)
-			tim += 2;
-	}
+		tim += 8;
+	}else
+		tim += 4;
 }
 
 void
@@ -701,10 +702,17 @@ immop(int op, int s, int n)
 	case 6: rS |= FLAGZ; sub(v, w, 0, s); break;
 	default: undef();
 	}
-	if(a.length == 2)
-		tim += s == 2 ? (n == 1 || n == 6 ? 14 : 16) : 8;
-	else
-		tim += s == 2 ? 20 : 12;
+	if(n == 6){
+		if(a.length == 2)
+			tim += s == 2 ? 14 : 8;
+		else
+			tim += s == 2 ? 12 : 8;
+	}else{
+		if(a.length == 2)
+			tim += s == 2 ? 16 : 8;
+		else
+			tim += s == 2 ? 20 : 12;
+	}
 	if(n != 6)
 		wmode(a, s, v);
 }
@@ -720,12 +728,15 @@ op_move(int op)
 	if((op & 0x1c0) != 0x40)
 		nz(v, s);
 	tim += 4;
+	if((op & 0700) == 0400)
+		tim -= 2;
 }
 
 void
 op_lea(int op, int n)
 {
-	r[8+n] = amode(op >> 3, op, 2)[0];
+	r[8+n] = amode(op >> 3, op, 1)[0];
+	if((op & 070) == 060 || (op & 077) == 073) tim += 2;
 }
 
 void
@@ -787,7 +798,8 @@ op_movem(int op)
 			}
 			w >>= 1;
 		}
-		tim += (op & 0x400) != 0 ? 8 : 12;
+		tim += (op & 0x400) != 0 ? 8 : 4;
+		if(s == 2) tim -= 4;
 	}
 }
 
@@ -882,16 +894,17 @@ op_nbcd(int op)
 	v = rmode(a, 0);
 	wmode(a, 0, subbcd(0, v));
 	if(a.length == 2)
-		tim += 8;
-	else
 		tim += 6;
+	else
+		tim += 8;
 }
 
 void
 op_pea(int op)
 {
 	r[15] = 0|r[15] - 4;
-	wmode([r[15]], 2, amode(op >> 3, op, 0)[0]);
+	wmode([r[15]], 2, amode(op >> 3, op, 1)[0]);
+	if((op & 070) == 060 || (op & 077) == 073) tim += 2;
 	tim += 8;
 }
 
@@ -980,10 +993,23 @@ op_move_usp(int op, int n)
 }
 
 void
+jtime(int op)
+{
+	int a;
+	
+	a = op >> 3 & 7;
+	if(a == 2 || a == 6 || (op & 077) == 073)
+		tim += 2;
+	else if((op & 077) == 071)
+		tim -= 2;
+}
+
+void
 op_jmp(int op)
 {
-	pc = amode(op >> 3, op, 2)[0];
-	tim += 4;
+	pc = amode(op >> 3, op, 1)[0];
+	jtime(op);
+	tim += 2;
 }
 
 void
@@ -991,10 +1017,11 @@ op_jsr(int op)
 {
 	int a[];
 
-	a = amode(op >> 3, op, 2);
+	a = amode(op >> 3, op, 1);
 	push32(pc);
 	pc = a[0];
-	tim += 12;
+	jtime(op);
+	tim += 10;
 }
 
 void
@@ -1101,7 +1128,7 @@ op_addq_subq_a(int op, int s, int n)
 {
 	if(n == 0)
 		n = 8;
-	tim += s == 2 || (op & 0x130) == 0x110 ? 8 : 4;
+	tim += s == 2 || (op & 0430) == 0410 ? 8 : 4;
 	if((op & 0x100) == 0)
 		r[8+(op&7)] = 0|r[8+(op&7)]+n;
 	else
@@ -1138,8 +1165,6 @@ op_bcc(int op)
 	v = op << 24 >> 24;
 	if(v == 0)
 		v = fetch16() << 16 >> 16;
-	else if((0|v+1) == 0)
-		v = fetch32();
 	if((op & 0xf00) == 0x100){ /* BSR */
 		push32(pc);
 		pc = 0|curpc + 2 + v;
@@ -1150,7 +1175,7 @@ op_bcc(int op)
 		pc = 0|curpc + 2 + v;
 		tim += 10;
 	}else
-		tim += op == 0 || op == 255 ? 12 : 8;
+		tim += (op & 0xff) == 0 ? 12 : 8;
 }
 
 void
@@ -1177,21 +1202,21 @@ op_divu_divs(int op, int n)
 		if((w^r[n]) < 0)
 			w = -w;
 		v = 0|Math.trunc((0|r[n]) / (v << 16 >> 16));
+		tim += 158;
 		if(v != v<<16>>16){
 			rS = rS & ~FLAGC | FLAGV;
 			return;
 		}
-		tim += 158;
 	}else{
 		u = r[n];
 		if(u < 0) u += 4294967296;
 		w = u % (v & 0xffff);
 		v = Math.floor(u) / (v & 0xffff);
+		tim += 140;
 		if(v >= 0x10000){
 			rS = rS & ~FLAGC | FLAGV;
 			return;
 		}
-		tim += 140;
 	}
 	r[n] = (v & 0xffff) | w << 16;
 	nz(v, 1);
@@ -1209,12 +1234,10 @@ op_sbcd(int op)
 		dst = amode(4, n, 0);
 		v = rmode(src, 0);
 		w = rmode(dst, 0);
-		wmode(dst, 0, subbcd(w, v));
-		tim += 18;
-	}else{
+		wmode(dst, 0, subbcd(w, v));;
+	}else
 		r[n] = r[n] & 0xffffff00 | subbcd(r[n], r[m]);
-		tim += 6;
-	}
+	tim += 6;
 }
 
 void
@@ -1241,7 +1264,7 @@ op_cmpm(int op, int s, int n)
 	w = rmode(src, s);
 	v = rmode(dst, s);
 	sub(v, w, 0, s);
-	tim += s == 2 ? 20 : 12;
+	tim += 4;
 }
 
 void
@@ -1284,11 +1307,9 @@ op_abcd(int op)
 		v = rmode(src, 0);
 		w = rmode(dst, 0);
 		wmode(dst, 0, addbcd(v, w));
-		tim += 18;
-	}else{
+	}else
 		r[n] = r[n] & 0xffffff00 | addbcd(r[n], r[m]);
-		tim += 6;
-	}
+	tim += 6;
 }
 
 void
@@ -1312,7 +1333,10 @@ op_adda_suba(int op, int n)
 
 	if((op & 0x100) != 0){
 		s = 2;
-		tim += 6;
+		if((op & 0x30) == 0 || (op & 0x3f) == 0x3c)
+			tim += 8;
+		else
+			tim += 6;
 	}else{
 		s = 1;
 		tim += 8;
@@ -1426,7 +1450,7 @@ step(void)
 		else if((op & 0x138) == 0x108)
 			op_movep(op, s, n);
 		else if((op & 0x100) != 0 || n == 4)
-			bitops(op, s, n);
+			bitop(op, s, n);
 		else
 			immop(op, s, n);
 		break;

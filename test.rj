@@ -95,8 +95,7 @@ encamode(var s, string cat)
 		return 074;
 	case "#disp":
 		s[1] = _s32(s[1]);
-		if(s[1] >= 0x8000 || s[1] < -0x8000) return 0xff;
-		if(s[1] == 0 || s[1] == -1 || s[1] >= 0x80 || s[1] < -0x80) return 0;
+		if(s[1] == 0 || s[1] >= 0x80 || s[1] < -0x80) return 0;
 		return _u8(s[1]);
 	default:
 		throw "don't know how to encode " + (string)s;
@@ -137,8 +136,7 @@ amrest(string size, var s)[]
 		default: throw "amrest";
 		}
 	case "#disp":
-		if(s[1] >= 0x8000 || s[1] < -0x8000) return [_u16(s[1] >> 16), _u16(s[1])];
-		if(s[1] == 0 || s[1] == -1 || s[1] >= 0x80 || s[1] < 0x80) return [_u16(s[1])];
+		if(s[1] == 0 || s[1] >= 0x80 || s[1] < 0x80) return [_u16(s[1])];
 		return [];
 	default:
 		throw "don't know how to encode " + (string)s;
@@ -150,6 +148,7 @@ bool
 match(var a[], var b[], var l[])
 {
 	int i;
+	string as[];
 	extern var Array;
 
 	if(typeof(a) == "string"){
@@ -157,6 +156,13 @@ match(var a[], var b[], var l[])
 			if(a.length != 1)
 				l[a.substr(1)] = b;
 			return true;
+		}
+		if(a.indexOf("|") >= 0){
+			as = a.split("|");
+			for(i = 0; i < as.length; i++)
+				if((var)as[i] === b)
+					return true;
+			return false;
 		}
 		return a === b;
 	}
@@ -223,6 +229,7 @@ int rend[];
 int _rSstart, _rSend;
 int _pcstart, _pcend;
 bool _x, _z, _n, _c, _v;
+int _tim_exp;
 int mem[string];
 int memwr_exp[string];
 int memwr_got[string];
@@ -569,6 +576,7 @@ prep(var l[])[]
 		memwr_got = {};
 		_pcstart = 1234;
 		pc = _pcstart;
+		_tim_exp = 0;
 		try{
 			_addrcheck(m);
 			enc = encode(m);
@@ -590,6 +598,7 @@ prep(var l[])[]
 			rstart[i] = derand("%R32");
 	_pcend = pc;
 	_rSend = _rSstart & ~0x1f | _getccr();
+	_tim_exp += _calctime(m);
 	return [m, enc];
 }
 
@@ -613,6 +622,7 @@ browser_run(var l[])
 	failmsg = "";
 	fail = false;
 	pc = _pcstart;
+	tim = 0;
 	try{
 		step();
 	}catch(e){
@@ -623,6 +633,7 @@ browser_run(var l[])
 	rS = _u32(rS);
 	fail = fail || pc !== _pcend;
 	fail = fail || rS !== _rSend;
+	fail = fail || tim != _tim_exp;
 	for(i = 0; i < 16; i++)
 		fail = fail || r[i] !== rval(i);
 	for(addr in mem)
@@ -630,6 +641,7 @@ browser_run(var l[])
 	if(fail){
 		string out = "";
 		out += ("<p>Test failed: <tt>" + format(m) + "</tt> " + failmsg + "<br>");
+		out += ("<tt>" + JSON.stringify(m) + "</tt><br>");
 		out += ("<tt>" + enc.map(var(s) return O(s,6)) + "</tt><br>");
 		out += ("<table>");
 		for(i = 0; i < 16; i++){
@@ -652,6 +664,11 @@ browser_run(var l[])
 			"<td><tt>" + SRformat(_rSstart) + "</tt></td>" +
 			"<td><tt>" + SRformat(_rSend) + "</tt></td>" +
 			"<td><tt>" + SRformat(rS) + "</tt></td>" +
+		"</tr>");
+		out += ("<tr" + (_tim_exp!=tim ? " style=\"font-weight: bold\"": "") + ">" +
+			"<td>time</td><td></td>" +
+			"<td><tt>" + (string)_tim_exp + "</tt></td>" +
+			"<td><tt>" + (string)tim + "</tt></td>" +
 		"</tr>");
 		for(addr in mem){
 			fail = memwr_exp[addr] !== memwr_got[addr];
